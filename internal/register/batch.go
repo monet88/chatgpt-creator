@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strings"
 
 	"github.com/verssache/chatgpt-creator/internal/email"
 	"github.com/verssache/chatgpt-creator/internal/util"
@@ -97,6 +98,18 @@ func RunBatch(totalAccounts int, outputFile string, maxWorkers int, proxy, defau
 					// Failed — return the slot so it gets retried
 					atomic.AddInt64(&remaining, 1)
 					ts := time.Now().Format("15:04:05")
+
+					if strings.Contains(errStr, "unsupported_email") {
+						parts := strings.Split(emailAddr, "@")
+						if len(parts) == 2 {
+							domain := parts[1]
+							email.AddBlacklistDomain(domain)
+							printMu.Lock()
+							fmt.Printf("[%s] [W%d] ⚠ Blacklisted domain: %s\n", ts, workerID, domain)
+							printMu.Unlock()
+						}
+					}
+
 					printMu.Lock()
 					fmt.Printf("[%s] [W%d] ✗ FAILURE: %s | %s\n", ts, workerID, emailAddr, errStr)
 					printMu.Unlock()

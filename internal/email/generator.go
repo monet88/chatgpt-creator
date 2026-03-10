@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v7"
@@ -17,6 +18,13 @@ import (
 
 	"github.com/verssache/chatgpt-creator/internal/util"
 )
+
+var blacklistedDomains sync.Map
+
+// AddBlacklistDomain adds a domain to the global blacklist.
+func AddBlacklistDomain(domain string) {
+	blacklistedDomains.Store(domain, true)
+}
 
 // CreateTempEmail fetches a new temp email using a random profile and gofakeit names.
 func CreateTempEmail(defaultDomain string) (string, error) {
@@ -61,9 +69,15 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 	doc.Find(".e7m.tt-suggestions div > p").Each(func(i int, s *goquery.Selection) {
 		domain := strings.TrimSpace(s.Text())
 		if domain != "" {
-			domains = append(domains, domain)
+			if _, blacklisted := blacklistedDomains.Load(domain); !blacklisted {
+				domains = append(domains, domain)
+			}
 		}
 	})
+
+	if len(domains) == 0 {
+		return "", fmt.Errorf("all available domains are blacklisted")
+	}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	randomDomain := domains[r.Intn(len(domains))]
