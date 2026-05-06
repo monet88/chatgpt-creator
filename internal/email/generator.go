@@ -1,8 +1,10 @@
 package email
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -130,8 +132,54 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 	return email, nil
 }
 
+var otpRegex = regexp.MustCompile(`\d{6}`)
+
+func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(reader)
+	if err != nil {
+		return "", err
+	}
+
+	otp := ""
+	doc.Find("#email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		text := s.Text()
+		matches := otpRegex.FindStringSubmatch(text)
+		if len(matches) == 0 {
+			return true
+		}
+		code := matches[0]
+		if code == "177010" {
+			return true
+		}
+		otp = code
+		return false
+	})
+
+	return otp, nil
+}
+
+func waitWithContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // GetVerificationCode polls generator.email for the OTP using a custom cookie.
 func GetVerificationCode(email string, maxRetries int, delay time.Duration) (string, error) {
+	return GetVerificationCodeWithContext(context.Background(), email, maxRetries, delay)
+}
+
+// GetVerificationCodeWithContext polls generator.email for the OTP using a custom cookie and context-aware waits.
+func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetries int, delay time.Duration) (string, error) {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid email format: %s", email)
@@ -139,9 +187,13 @@ func GetVerificationCode(email string, maxRetries int, delay time.Duration) (str
 	username := parts[0]
 	domain := parts[1]
 
-	otpRegex := regexp.MustCompile(`\d{6}`)
-
 	for i := 0; i < maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+
 		options := []tls_client.HttpClientOption{
 			tls_client.WithClientProfile(profiles.Chrome_131),
 		}
@@ -157,51 +209,40 @@ func GetVerificationCode(email string, maxRetries int, delay time.Duration) (str
 			return "", fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Critical: Set request header Cookie: surl={domain}/{username} explicitly.
 		req.Header.Set("Cookie", fmt.Sprintf("surl=%s/%s", domain, username))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			// Log error and continue retrying
-			time.Sleep(delay)
+			if waitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			time.Sleep(delay)
+			if waitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
 
-		doc, err := goquery.NewDocumentFromReader(resp.Body)
+		otp, err := parseVerificationCodeFromHTML(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			time.Sleep(delay)
+			if waitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
-
-		// Find OTP in #email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg
-		otp := ""
-		doc.Find("#email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg").EachWithBreak(func(i int, s *goquery.Selection) bool {
-			text := s.Text()
-			matches := otpRegex.FindStringSubmatch(text)
-			if len(matches) > 0 {
-				code := matches[0]
-				// Skip code "177010" explicitly
-				if code == "177010" {
-					return true // continue to next if any, but we only expect one
-				}
-				otp = code
-				return false // break
-			}
-			return true
-		})
 
 		if otp != "" {
 			return otp, nil
 		}
 
-		time.Sleep(delay)
+		if waitWithContext(ctx, delay) != nil {
+			return "", ctx.Err()
+		}
 	}
 
 	return "", fmt.Errorf("failed to get verification code after %d retries", maxRetries)

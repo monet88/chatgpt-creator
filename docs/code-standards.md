@@ -2,70 +2,53 @@
 
 ## Scope
 
-This standard reflects the current Go codebase under `cmd/` and `internal/`.
+Applies to Go source under `cmd/` and `internal/`.
 
-## Structure Standards
+## Core Principles
 
-- Keep CLI entry responsibilities in `cmd/register/main.go`.
-- Keep reusable logic in `internal/*` packages.
-- Maintain package boundaries:
-  - `config`: config loading/validation
-  - `register`: network flow + batch orchestration
-  - `email`: email/OTP concerns
-  - `sentinel`: challenge/token concerns
-  - `util`: generic helpers
+- Keep boundaries small and testable.
+- Prefer local seams over broad framework abstractions.
+- Keep runtime behavior bounded and cancellation-aware.
 
-## Naming and API Conventions
+## CLI and Config Rules
 
-- Exported symbols use Go PascalCase.
-- Internal helper methods on `Client` remain lower camelCase.
-- JSON config keys remain snake_case to match `config.json`:
-  - `proxy`
-  - `output_file`
-  - `default_password`
-  - `default_domain`
+- CLI parsing currently lives in `cmd/register/main.go` (with `cmd/register/command.go` as the thin process entry wrapper).
+- Config precedence must remain: `defaults < file < env < flags`.
+- Validation errors must map to explicit non-zero exit codes.
 
-## Error Handling
+## Failure Model Rules
 
-- Return contextual errors with `%w` when wrapping (`fmt.Errorf`).
-- Avoid silent failure in core flow steps.
-- For retryable steps, centralize retry behavior in orchestration (batch layer and OTP retry branch).
+- Use typed failures from `internal/register/failures.go`.
+- Wrap step errors with `WrapFailure(step, status, err)` where possible.
+- Avoid free-form substring logic for control flow when typed error is available.
 
-## Concurrency Rules
+## Concurrency and Runtime Controls
 
-- Protect shared stdout with `sync.Mutex`.
-- Protect shared output file writes with `sync.Mutex`.
-- Use `sync/atomic` for counters (`remaining`, success/failure/attempt counts).
+- Use context-aware waits; avoid raw `time.Sleep` in retry paths.
+- Maintain explicit max-attempt and failure-threshold controls.
+- Protect shared logging and file writes with mutexes.
 
-## Configuration Rules
+## Output and Logging Rules
 
-- Keep defaults in `internal/config/config.go` constants.
-- Validate constraints during load (example: password length >= 12 when configured).
-- Use environment overrides only where explicitly supported by current config loader implementation.
+- Never print plain passwords to console.
+- Redact proxy credentials and token-like substrings before logging.
+- In JSON mode: stdout reserved for machine-readable summary; diagnostics routed to stderr.
 
-## Networking Rules
+## Test Rules
 
-- Default request headers are applied in the register client request wrapper.
-- TLS profile and cookie jar must be initialized during client construction.
-- New outbound dependencies should be documented in `docs/deployment-guide.md`.
-
-## Logging Rules
-
-- Use timestamped worker logs (`[time] [Wn]`) consistently.
-- Keep summary output deterministic: target, success, attempts, failures, elapsed.
-
-## Testing Standard (Target)
-
-Current state: no tests found.
-
-When adding tests later:
-- Use `go test ./...` baseline.
-- Add race checks: `go test -race ./...`.
-- Prioritize table-driven tests for pure functions and parser logic.
+- Default tests must stay offline.
+- Use table-driven tests for parsers and validation behavior.
+- Keep fake dependencies around network boundaries.
+- Validation baseline:
+  - `go test ./...`
+  - `go test -race ./...`
+  - `go test -cover ./...`
+  - `go vet ./...`
 
 ## Documentation Sync Rule
 
-When modifying behavior in any `internal/*` package, update at least:
+When behavior changes in CLI, failure handling, runtime controls, or output policy, update:
+- `README.md`
 - `docs/codebase-summary.md`
 - `docs/system-architecture.md`
-- `README.md` (if user-facing behavior changes)
+- roadmap/changelog docs

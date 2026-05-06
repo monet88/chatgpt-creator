@@ -1,39 +1,19 @@
 # ChatGPT Creator (Go)
 
-CLI tool for batch ChatGPT account registration with concurrent workers, TLS client profile spoofing, temporary email OTP handling, and Sentinel token generation.
+CLI tool for batch ChatGPT account registration with bounded retries, typed failures, redacted diagnostics, and optional JSON run summary.
 
 ## Scope and Status
 
 - Language: Go
 - Entry point: `cmd/register/main.go`
-- Current mode: interactive CLI (prompt-driven)
-- Output: `email|password` lines to configured output file
-
-## Current Features (Verified)
-
-- Interactive prompts for proxy, total accounts, workers, default password, and default domain.
-- Config loading from `config.json` via `internal/config.Load`.
-- `PROXY` environment variable override.
-- Concurrent worker pool with retry-until-success semantics in `internal/register.RunBatch`.
-- Registration flow in `internal/register/flow.go`:
-  - visit homepage
-  - fetch CSRF token
-  - sign in bootstrap
-  - authorize redirect
-  - register
-  - send OTP
-  - validate OTP
-  - create account
-  - callback
-- Temporary email generation and OTP polling from `generator.email` in `internal/email`.
-- Domain blacklist persistence to `blacklist.json` when encountering `unsupported_email` errors.
-- Sentinel challenge + proof-of-work token generation in `internal/sentinel`.
+- Modes: non-interactive flags + interactive fallback
+- Output file format: `email|password` (unchanged)
 
 ## Quick Start
 
 ### Requirements
 
-- Go 1.25.x (repo `go.mod` currently declares `go 1.25.5`)
+- Go 1.25.x
 
 ### Install
 
@@ -43,15 +23,23 @@ cd chatgpt-creator
 go mod download
 ```
 
-### Run
+### Non-interactive run
+
+```bash
+go run cmd/register/main.go --config config.json --total 10 --workers 3 --json
+```
+
+### Interactive fallback
 
 ```bash
 go run cmd/register/main.go
 ```
 
+If no actionable runtime flags are provided, CLI falls back to interactive prompts.
+
 ## Configuration
 
-Create `config.json` at repository root:
+`config.json` example:
 
 ```json
 {
@@ -62,44 +50,83 @@ Create `config.json` at repository root:
 }
 ```
 
-| Key | Type | Behavior |
-|---|---|---|
-| `proxy` | string | Optional proxy URL passed into TLS client (`WithProxyUrl`) |
-| `output_file` | string | File where successful accounts are appended |
-| `default_password` | string | If empty, password is generated (`GeneratePassword(14)`); if set, must be >= 12 chars |
-| `default_domain` | string | If empty, domain is selected via `generator.email`; if set, email uses that domain |
+### Precedence
 
-Environment override:
+`defaults < config file < environment < flags`
 
-- `PROXY`: overrides `config.proxy`
+- Env override currently supported: `PROXY`
+- Flags:
+  - `--config`
+  - `--total`
+  - `--workers`
+  - `--proxy`
+  - `--output`
+  - `--password`
+  - `--domain`
+  - `--json`
+  - `--interactive`
 
-## Output Format
+### Validation
 
-Each success is appended to `output_file` as:
+- `--total > 0`
+- `--workers > 0`
+- password length `>= 12` when provided
+- output path must not be empty
+
+## Output
+
+### Credential file
+
+On success, credentials are appended to configured output file as:
 
 ```text
 email|password
 ```
 
-## Project Structure
+### JSON summary (`--json`)
 
-```text
-cmd/register/main.go          CLI entry and prompts
-internal/config/config.go     Config defaults, load, env override
-internal/register/batch.go    Worker pool, retries, output writing
-internal/register/client.go   TLS-backed client/session setup
-internal/register/flow.go     End-to-end registration state flow
-internal/email/generator.go   Temp email + OTP polling + blacklist persistence
-internal/sentinel/*.go        Sentinel challenge + PoW token builder
-internal/chrome/profiles.go   Browser profile mapping to tls-client profiles
-internal/util/*.go            Password/name/UUID/trace helpers
+- JSON summary is written to **stdout**
+- Diagnostics/progress logs are written to **stderr**
+- Summary excludes credentials, tokens, cookies, and raw sensitive payloads
+
+Example shape:
+
+```json
+{
+  "target": 10,
+  "success": 10,
+  "attempts": 13,
+  "failures": 3,
+  "elapsed": "2m 11s",
+  "stop_reason": "target_reached",
+  "output_file": "results.txt",
+  "failure_summary": {
+    "unsupported_email": 2,
+    "otp_timeout": 1
+  }
+}
 ```
 
-## Known Constraints / Unknowns
+## Runtime Safety
 
-- This repo does not include automated tests at the moment (not found in current tree).
-- External endpoints (`chatgpt.com`, `auth.openai.com`, `sentinel.openai.com`, `generator.email`) can change behavior at any time.
-- `release-manifest.json` is large and not required for the runtime flow described above.
+- Typed failures (`unsupported_email`, `otp_timeout`, `challenge_failed`, `rate_limited`, `upstream_changed`, `network`, `validation`, `output_write`)
+- Context-aware waits and cancellation-aware OTP polling
+- Batch stop controls:
+  - max attempts
+  - max consecutive failures
+  - per-account timeout
+- Unsupported domains are blacklisted to `blacklist.json`
+
+## Testing and Validation
+
+```bash
+go test ./...
+go test -race ./...
+go test -cover ./...
+go vet ./...
+```
+
+Default tests are offline and use fake dependencies.
 
 ## Legal and Usage Notice
 

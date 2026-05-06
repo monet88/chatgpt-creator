@@ -114,7 +114,7 @@ func (c *Client) log(step string, status int) {
 	defer c.printMu.Unlock()
 
 	ts := time.Now().Format("15:04:05")
-	fmt.Printf("[%s] [W%d] [%s] %s | %d\n", ts, c.workerID, c.tag, step, status)
+	diagnosticPrintf("[%s] [W%d] [%s] %s | %d\n", ts, c.workerID, c.tag, safeLogMessage(step), status)
 }
 
 func (c *Client) print(msg string) {
@@ -122,5 +122,5 @@ func (c *Client) print(msg string) {
 	defer c.printMu.Unlock()
 
 	ts := time.Now().Format("15:04:05")
-	fmt.Printf("[%s] [W%d] [%s] %s\n", ts, c.workerID, c.tag, msg)
+	diagnosticPrintf("[%s] [W%d] [%s] %s\n", ts, c.workerID, c.tag, safeLogMessage(msg))
 }

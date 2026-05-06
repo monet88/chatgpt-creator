@@ -1,6 +1,7 @@
 package register
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -281,139 +282,181 @@ func (c *Client) callback(cbURL string) (int, map[string]interface{}, error) {
 }
 
 func (c *Client) RunRegister(emailAddr, password, name, birthdate string) error {
+	return c.RunRegisterWithContext(context.Background(), emailAddr, password, name, birthdate)
+}
+
+func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
 	c.print("Starting registration flow...")
 
 	if err := c.visitHomepage(); err != nil {
-		return err
+		return WrapFailure("visit_homepage", 0, err)
 	}
-	c.randomDelay(0.3, 0.8)
+	if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+		return WrapFailure("visit_homepage_delay", 0, err)
+	}
 
 	csrf, err := c.getCSRF()
 	if err != nil {
-		return err
+		return WrapFailure("get_csrf", 0, err)
 	}
-	c.randomDelay(0.2, 0.5)
+	if err := c.randomDelayWithContext(ctx, 0.2, 0.5); err != nil {
+		return WrapFailure("csrf_delay", 0, err)
+	}
 
-	authURL, err := c.signin(emailAddr, csrf)
+	authorizeURL, err := c.signin(emailAddr, csrf)
 	if err != nil {
-		return err
+		return WrapFailure("signin", 0, err)
 	}
-	c.randomDelay(0.3, 0.8)
+	if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+		return WrapFailure("signin_delay", 0, err)
+	}
 
-	finalURL, err := c.authorize(authURL)
+	finalURL, err := c.authorize(authorizeURL)
 	if err != nil {
-		return err
+		return WrapFailure("authorize", 0, err)
 	}
-	c.randomDelay(0.3, 0.8)
+	if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+		return WrapFailure("authorize_delay", 0, err)
+	}
 
 	u, _ := url.Parse(finalURL)
 	finalPath := u.Path
-
-
 	needOTP := false
 
 	if strings.Contains(finalPath, "create-account/password") {
-		c.randomDelay(0.5, 1.0)
-		status, data, err := c.register(emailAddr, password)
-		if err != nil {
-			return err
+		if err := c.randomDelayWithContext(ctx, 0.5, 1.0); err != nil {
+			return WrapFailure("pre_register_delay", 0, err)
+		}
+		status, data, runErr := c.register(emailAddr, password)
+		if runErr != nil {
+			return WrapFailure("register", status, runErr)
 		}
 		if status != 200 {
-			return fmt.Errorf("register failed (%d): %v", status, data)
+			return NewFailure(classifyStatusFailure(status, data), "register", status, fmt.Errorf("register failed: %v", data))
 		}
-		c.randomDelay(0.3, 0.8)
-		c.sendOTP()
+		if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+			return WrapFailure("post_register_delay", 0, err)
+		}
+		_, _, _ = c.sendOTP()
 		needOTP = true
 	} else if strings.Contains(finalPath, "email-verification") || strings.Contains(finalPath, "email-otp") {
 		c.print("Jump to OTP verification stage")
 		needOTP = true
 	} else if strings.Contains(finalPath, "about-you") {
 		c.print("Jump to fill information stage")
-		c.randomDelay(0.5, 1.0)
-		status, data, err := c.createAccount(name, birthdate)
-		if err != nil {
-			return err
+		if err := c.randomDelayWithContext(ctx, 0.5, 1.0); err != nil {
+			return WrapFailure("pre_create_account_delay", 0, err)
+		}
+		status, data, runErr := c.createAccount(name, birthdate)
+		if runErr != nil {
+			return WrapFailure("create_account", status, runErr)
 		}
 		if status != 200 {
-			return fmt.Errorf("create account failed (%d): %v", status, data)
+			return NewFailure(classifyStatusFailure(status, data), "create_account", status, fmt.Errorf("create account failed: %v", data))
 		}
-		c.randomDelay(0.3, 0.5)
+		if err := c.randomDelayWithContext(ctx, 0.3, 0.5); err != nil {
+			return WrapFailure("post_create_account_delay", 0, err)
+		}
 
 		var cbURL string
-		if u, ok := data["continue_url"].(string); ok {
-			cbURL = u
-		} else if u, ok := data["url"].(string); ok {
-			cbURL = u
-		} else if u, ok := data["redirect_url"].(string); ok {
-			cbURL = u
+		if nextURL, ok := data["continue_url"].(string); ok {
+			cbURL = nextURL
+		} else if nextURL, ok := data["url"].(string); ok {
+			cbURL = nextURL
+		} else if nextURL, ok := data["redirect_url"].(string); ok {
+			cbURL = nextURL
 		}
-		c.callback(cbURL)
+		_, _, _ = c.callback(cbURL)
 		return nil
 	} else if strings.Contains(finalPath, "callback") || strings.Contains(finalURL, "chatgpt.com") {
 		c.print("Account registration completed")
 		return nil
 	} else {
 		c.print(fmt.Sprintf("Unknown jump: %s", finalURL))
-		c.register(emailAddr, password)
-		c.sendOTP()
+		_, _, _ = c.register(emailAddr, password)
+		_, _, _ = c.sendOTP()
 		needOTP = true
 	}
 
 	if needOTP {
-		otpCode, err := email.GetVerificationCode(emailAddr, 20, 3*time.Second)
-		if err != nil {
-			return err
+		otpCode, otpErr := email.GetVerificationCodeWithContext(ctx, emailAddr, 20, 3*time.Second)
+		if otpErr != nil {
+			return NewFailure(FailureOTPTimeout, "get_otp", 0, otpErr)
 		}
 
-		c.randomDelay(0.3, 0.8)
-		status, data, err := c.validateOTP(otpCode)
-		if err != nil {
-			return err
+		if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+			return WrapFailure("pre_validate_otp_delay", 0, err)
+		}
+		status, data, validateErr := c.validateOTP(otpCode)
+		if validateErr != nil {
+			return WrapFailure("validate_otp", status, validateErr)
 		}
 
 		if status != 200 {
 			c.print("Verification code failed, retrying...")
-			c.sendOTP()
-			c.randomDelay(1.0, 2.0)
-			otpCode, err = email.GetVerificationCode(emailAddr, 10, 3*time.Second)
-			if err != nil {
-				return err
+			_, _, _ = c.sendOTP()
+			if err := c.randomDelayWithContext(ctx, 1.0, 2.0); err != nil {
+				return WrapFailure("retry_otp_delay", 0, err)
 			}
-			c.randomDelay(0.3, 0.8)
-			status, data, err = c.validateOTP(otpCode)
-			if err != nil {
-				return err
+			otpCode, otpErr = email.GetVerificationCodeWithContext(ctx, emailAddr, 10, 3*time.Second)
+			if otpErr != nil {
+				return NewFailure(FailureOTPTimeout, "retry_get_otp", status, otpErr)
+			}
+			if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
+				return WrapFailure("retry_validate_otp_delay", 0, err)
+			}
+			status, data, validateErr = c.validateOTP(otpCode)
+			if validateErr != nil {
+				return WrapFailure("retry_validate_otp", status, validateErr)
 			}
 			if status != 200 {
-				return fmt.Errorf("verification code failed after retry (%d): %v", status, data)
+				return NewFailure(FailureOTPTimeout, "validate_otp", status, fmt.Errorf("verification code failed after retry: %v", data))
 			}
 		}
 	}
 
-	c.randomDelay(0.5, 1.5)
-	status, data, err := c.createAccount(name, birthdate)
-	if err != nil {
-		return err
+	if err := c.randomDelayWithContext(ctx, 0.5, 1.5); err != nil {
+		return WrapFailure("pre_final_create_account_delay", 0, err)
+	}
+	status, data, createErr := c.createAccount(name, birthdate)
+	if createErr != nil {
+		return WrapFailure("final_create_account", status, createErr)
 	}
 	if status != 200 {
-		return fmt.Errorf("create account failed (%d): %v", status, data)
+		return NewFailure(classifyStatusFailure(status, data), "final_create_account", status, fmt.Errorf("create account failed: %v", data))
 	}
 
-	c.randomDelay(0.2, 0.5)
-	var cbURL string
-	if u, ok := data["continue_url"].(string); ok {
-		cbURL = u
-	} else if u, ok := data["url"].(string); ok {
-		cbURL = u
-	} else if u, ok := data["redirect_url"].(string); ok {
-		cbURL = u
+	if err := c.randomDelayWithContext(ctx, 0.2, 0.5); err != nil {
+		return WrapFailure("pre_callback_delay", 0, err)
 	}
-	c.callback(cbURL)
+	var cbURL string
+	if nextURL, ok := data["continue_url"].(string); ok {
+		cbURL = nextURL
+	} else if nextURL, ok := data["url"].(string); ok {
+		cbURL = nextURL
+	} else if nextURL, ok := data["redirect_url"].(string); ok {
+		cbURL = nextURL
+	}
+	_, _, _ = c.callback(cbURL)
 
 	return nil
 }
 
-func (c *Client) randomDelay(low, high float64) {
+func classifyStatusFailure(status int, data map[string]interface{}) FailureKind {
+	if status == 429 {
+		return FailureRateLimited
+	}
+	message := strings.ToLower(fmt.Sprintf("%v", data))
+	if strings.Contains(message, "unsupported_email") {
+		return FailureUnsupportedEmail
+	}
+	if strings.Contains(message, "challenge") || strings.Contains(message, "sentinel") {
+		return FailureChallengeFailed
+	}
+	return FailureUpstreamChanged
+}
+
+func (c *Client) randomDelayWithContext(ctx context.Context, low, high float64) error {
 	delay := low + rand.Float64()*(high-low)
-	time.Sleep(time.Duration(delay * float64(time.Second)))
+	return waitWithContext(ctx, time.Duration(delay*float64(time.Second)))
 }

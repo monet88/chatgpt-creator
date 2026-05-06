@@ -2,68 +2,66 @@
 
 ## Overview
 
-The application is a single-process CLI with concurrent worker goroutines. Each worker runs an account registration transaction over HTTP using a TLS-fingerprinted client.
+Single-process CLI with worker goroutines. Runtime is bounded by context-aware controls and explicit stop conditions.
 
 ## Component Diagram
 
 ```text
-CLI (cmd/register/main.go)
+CLI (cmd/register)
   -> Config Loader (internal/config)
-  -> Batch Orchestrator (internal/register/batch.go)
+  -> Batch Runner (internal/register/batch.go)
       -> Worker N
-          -> HTTP Client Factory (internal/register/client.go)
-          -> Email Provider + OTP Poller (internal/email)
-          -> Registration Flow Engine (internal/register/flow.go)
+          -> Client Factory (internal/register/client.go)
+          -> Flow Engine (internal/register/flow.go)
+              -> OTP Provider (internal/email)
               -> Sentinel Token Builder (internal/sentinel)
-          -> Result Writer (output file)
+          -> Credential Writer (output file)
+  -> BatchResult + Failure Summary
 ```
 
 ## Runtime Flow
 
-1. CLI gathers runtime inputs.
-2. Batch layer starts `maxWorkers` goroutines.
-3. Worker claims a remaining slot atomically.
-4. Worker creates temp email and password/name/birthdate payload.
-5. Worker executes flow:
-   - visit homepage
-   - get CSRF
-   - signin bootstrap
-   - authorize redirect resolution
-   - register
-   - send OTP
-   - verify OTP
-   - create account (with Sentinel token)
-   - callback
-6. On success, credential line is appended to output file.
-7. On failure, remaining slot is restored for retry.
-8. Batch exits when success target is met.
-
-## State and Persistence
-
-- Ephemeral in-memory state: counters, worker sessions.
-- Persistent runtime artifacts:
-  - account output file (default `results.txt`)
-  - `blacklist.json` for blocked domains
+1. Parse flags / choose interactive fallback.
+2. Load config and apply precedence (`defaults < file < env < flags`).
+3. Validate runtime inputs.
+4. Start workers and execute attempts under options:
+   - max attempts
+   - max consecutive failures
+   - per-account timeout
+   - context cancellation
+5. Classify failures into typed taxonomy.
+6. On success write `email|password` to output file.
+7. Return `BatchResult` with `stop_reason` and `failure_summary`.
 
 ## Concurrency Model
 
-- Goroutine-per-worker model.
-- Shared counters via `sync/atomic`.
-- Shared IO synchronization via mutexes.
-
-## External Interfaces
-
-- OpenAI web/auth endpoints via HTTP.
-- Sentinel challenge endpoint for anti-abuse token generation.
-- generator.email pages for domain list + inbox scraping.
+- Worker pool (`maxWorkers` goroutines)
+- Counters via `sync/atomic`
+- Shared output/log synchronization via mutexes
+- Context-aware delay/retry controls
 
 ## Failure Model
 
-- Network or flow failures are counted and retried by slot restoration.
-- OTP validation has one explicit resend/retry branch.
-- Unsupported email domains can be persisted to blacklist to reduce repeat failures.
+Typed kinds:
+- `unsupported_email`
+- `otp_timeout`
+- `challenge_failed`
+- `rate_limited`
+- `upstream_changed`
+- `network`
+- `validation`
+- `output_write`
 
-## Assumptions / Unknowns
+## Observability and Output
 
-- Assumes upstream endpoint payload contracts remain compatible.
-- Assumes generator.email DOM selectors remain valid.
+- Diagnostics: timestamped worker logs
+- Log safety: newline sanitization + token/password-like redaction
+- JSON mode: summary on stdout, diagnostics on stderr
+- Credential persistence format unchanged
+
+## External Interfaces
+
+- `https://chatgpt.com`
+- `https://auth.openai.com`
+- `https://sentinel.openai.com`
+- `https://generator.email`

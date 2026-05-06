@@ -4,33 +4,33 @@
 
 | Phase | Status | Notes |
 |---|---|---|
-| Docs Initialization | Completed | Core docs set created and aligned with codebase snapshot (2026-05-06) |
-| Stability Hardening | Planned | Add tests, improve retry/backoff strategy, reduce flow fragility |
-| Operability Improvements | Planned | Better observability, config ergonomics, failure categorization |
+| Docs Initialization | Completed | Core docs established |
+| Test Baseline | Completed | Offline tests added for config/email/register/CLI |
+| Operability Improvements | Completed | Cobra CLI, typed failures, runtime caps, redaction, JSON summary |
+| Continuous Hardening | In Progress | Maintain resilience against upstream drift and selector changes |
 
-## Milestone Backlog (Implementation-Oriented)
+## Milestones
 
-### M1 — Test Baseline
-- Add unit tests for config validation and utility generators.
-- Add flow-level integration scaffolding with safe mocks.
-- Define minimum CI command set (`go test`, `-race`, coverage).
+### M1 — Testability and Seams (Completed)
+- Added mock-first seams for register batch flow.
+- Added parser/unit tests and fake flow tests.
 
-### M2 — Network/Flow Resilience
-- Normalize retry strategy per step (status-based + transient error handling).
-- Reduce dependence on fragile page selectors where possible.
-- Improve error typing (instead of broad string matching).
+### M2 — CLI and Runtime Safety (Completed)
+- Added non-interactive CLI via Cobra.
+- Added validation + exit code mapping.
+- Added bounded attempts and failure threshold controls.
 
-### M3 — Operational Safety
-- Add dry-run/simulation mode for non-production validation.
-- Add redaction rules for logs and outputs.
-- Add configurable timeout budgets per flow stage.
+### M3 — Secure Output and Automation (Completed)
+- Added redaction for password/proxy/token-like log content.
+- Added JSON run summary with failure taxonomy and stop reason.
+- Preserved `email|password` output file compatibility.
 
-## Documentation Maintenance Cadence
+### M4 — Ongoing Maintenance (In Progress)
+- Keep docs synced with behavior.
+- Expand drift-detection and integration safety checks when needed.
 
-- Update `README.md` after any user-facing CLI/config change.
-- Update architecture and codebase summary after internal flow/package changes.
-- Review roadmap status weekly or after significant merges.
+## Maintenance Cadence
 
-## Explicit Unknowns
-
-- Priority order between test investment and feature additions is not yet defined by product owner.
+- Update changelog after each feature/fix batch.
+- Re-run race/coverage/vet baseline before release.
+- Re-check documentation accuracy after flow updates.
