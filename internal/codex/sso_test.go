@@ -213,9 +213,10 @@ func TestExchangeCode_Success(t *testing.T) {
 }
 
 func TestExchangeCode_Failure(t *testing.T) {
+	sensitiveBody := `{"error":"invalid_grant","error_description":"code expired","access_token":"secret-at","refresh_token":"secret-rt","id_token":"secret-id"}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, `{"error":"invalid_grant","error_description":"code expired"}`)
+		fmt.Fprint(w, sensitiveBody)
 	}))
 	defer server.Close()
 
@@ -225,5 +226,14 @@ func TestExchangeCode_Failure(t *testing.T) {
 	_, err := ExchangeCode(context.Background(), cfg, "expired-code", "verifier")
 	if err == nil {
 		t.Fatal("expected error for expired code")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "status=400") {
+		t.Fatalf("expected status in error, got %q", message)
+	}
+	for _, forbidden := range []string{"secret-at", "secret-rt", "secret-id", sensitiveBody, "invalid_grant", "code expired"} {
+		if strings.Contains(message, forbidden) {
+			t.Fatalf("error leaked sensitive payload %q in %q", forbidden, message)
+		}
 	}
 }

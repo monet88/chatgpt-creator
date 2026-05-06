@@ -1,6 +1,7 @@
 package register
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -24,5 +25,15 @@ func TestFormatDuration(t *testing.T) {
 				t.Fatalf("formatDuration(%v) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestProviderOptions_DoesNotExposePhoneOverrides(t *testing.T) {
+	typeOfProviders := reflect.TypeOf(ProviderOptions{})
+	if _, ok := typeOfProviders.FieldByName("PhoneProvider"); ok {
+		t.Fatal("ProviderOptions must not expose PhoneProvider")
+	}
+	if _, ok := typeOfProviders.FieldByName("ViOTPServiceID"); ok {
+		t.Fatal("ProviderOptions must not expose ViOTPServiceID")
 	}
 }

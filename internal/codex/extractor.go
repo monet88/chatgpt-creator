@@ -28,24 +28,30 @@ type TokenEntry struct {
 
 // Extractor orchestrates the full post-registration Codex token extraction flow.
 type Extractor struct {
-	cfg        SSOConfig
-	outputFile string
-	fileMu     sync.Mutex
+	cfg                 SSOConfig
+	outputFile          string
+	experimentalEnabled bool
+	fileMu              sync.Mutex
 }
 
 // NewExtractor creates an Extractor with the default SSO config and output path.
 func NewExtractor(outputFile string) *Extractor {
 	return &Extractor{
-		cfg:        DefaultSSOConfig(),
-		outputFile: outputFile,
+		cfg:                 DefaultSSOConfig(),
+		outputFile:          outputFile,
+		experimentalEnabled: false,
 	}
 }
 
-// Extract performs the full PKCE + SSO flow using the already-authenticated session.
+// Extract performs the full PKCE + SSO flow.
 // It navigates to the authorize URL via a plain HTTP redirect (not a browser), starts
 // a localhost callback server, exchanges the code, and appends the token to the output file.
 // Returns a non-nil error if any step fails; callers should treat this as non-fatal.
 func (e *Extractor) Extract(ctx context.Context, emailAddr string) (*TokenResult, error) {
+	if !e.experimentalEnabled {
+		return nil, fmt.Errorf("codex: extraction is not supported in safe mode")
+	}
+
 	pkce, err := GeneratePKCE()
 	if err != nil {
 		return nil, fmt.Errorf("codex: PKCE generation failed: %w", err)
@@ -71,10 +77,8 @@ func (e *Extractor) Extract(ctx context.Context, emailAddr string) (*TokenResult
 		codeCh <- code
 	}()
 
-	// Navigate the session to the authorize URL to trigger the OAuth redirect.
-	// We use a plain http.Client here; the authenticated session cookies should
-	// be present via the tls_client session, but Codex SSO relies on auth0.openai.com
-	// cookies set during registration. We make the authorize request in the background.
+	// Navigate to authorize URL to trigger OAuth redirect.
+	// This plain http.Client call is best-effort only and does not reuse registration session cookies.
 	go func() {
 		client := &http.Client{
 			Timeout: 15 * time.Second,

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/verssache/chatgpt-creator/internal/email"
-	"github.com/verssache/chatgpt-creator/internal/phone"
 	proxypkg "github.com/verssache/chatgpt-creator/internal/proxy"
 )
 
@@ -99,7 +98,7 @@ func RunBatchForCLI(ctx context.Context, totalAccounts int, outputFile string, m
 }
 
 // ProviderOptions holds optional provider overrides for batch registration.
-// Zero values use defaults (generator.email OTP, no phone, no proxy pool, no codex).
+// Zero values use defaults (generator.email OTP, no proxy pool, no codex).
 type ProviderOptions struct {
 	// ProxyPool overrides the single proxy with a rotating pool.
 	// When set, resolveProxy delegates to pool.Next and reportProxy delegates to pool.Report.
@@ -110,10 +109,6 @@ type ProviderOptions struct {
 	}
 	// OTPProvider overrides the default generator.email OTP retrieval.
 	OTPProvider email.OTPProvider
-	// PhoneProvider enables SMS-based phone verification.
-	PhoneProvider phone.PhoneProvider
-	// ViOTPServiceID is the ViOTP service ID for OpenAI.
-	ViOTPServiceID int
 }
 
 // RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
@@ -122,10 +117,6 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 
 	if providers.OTPProvider != nil {
 		deps.otpProvider = providers.OTPProvider
-	}
-	if providers.PhoneProvider != nil {
-		deps.phoneProvider = providers.PhoneProvider
-		deps.viOTPServiceID = providers.ViOTPServiceID
 	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool

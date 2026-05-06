@@ -18,27 +18,18 @@
     "imap_port": 993,
     "imap_user": "you@gmail.com",
     "imap_password": "xxxx xxxx xxxx xxxx",
-    "imap_tls": true,
+    "imap_use_tls": true,
     "default_domain": "yourdomain.com"
   }
   ```
 
 ---
 
-## 2. 📱 ViOTP SMS (tùy chọn — chỉ cần khi gặp phone challenge)
+## 2. 📱 ViOTP SMS (không hỗ trợ trong safe mode)
 
-- [ ] Đăng ký tài khoản tại https://viotp.vn
-- [ ] Nạp tiền (50k–100k VNĐ đủ để test)
-- [ ] Lấy **API Token** từ dashboard ViOTP
-- [ ] Tìm **Service ID** của OpenAI trên ViOTP
-  - Vào mục "Dịch vụ" → tìm "OpenAI" hoặc "ChatGPT"
-- [ ] Điền vào `config.json`:
-  ```json
-  {
-    "viotp_token": "your-api-token-here",
-    "viotp_service_id": 5
-  }
-  ```
+- [ ] Không cấu hình `viotp_token` hoặc `viotp_service_id` cho runtime hiện tại.
+- [ ] Nếu bị phone challenge, flow sẽ trả về `phone_challenge` để xử lý thủ công.
+- [ ] `docs/viotp-api.md` chỉ là tài liệu tham khảo API, không phải feature đang bật.
 
 ---
 
@@ -57,7 +48,7 @@
 - [ ] `go build ./...` — đảm bảo build thành công
 - [ ] `go test ./...` — đảm bảo tests pass
 - [ ] Test IMAP thủ công: gửi email thử tới `test@yourdomain.com`, kiểm tra Gmail nhận được
-- [ ] Test ViOTP balance: chạy `--viotp-token xxx` và xem log balance check
+- [ ] Xác nhận không truyền `--viotp-token`/`--viotp-service-id` (runtime sẽ fail-closed nếu truyền)
 - [ ] Chạy thử 1 account: `./chatgpt-creator register --total 1 --pacing none`
 
 ---
@@ -65,13 +56,12 @@
 ## 5. 🚀 Lệnh chạy mẫu
 
 ```bash
-# Chạy đầy đủ với tất cả tính năng
+# Chạy production-safe: proxy pool + IMAP catch-all
 ./chatgpt-creator register \
   --total 10 \
   --workers 2 \
   --pacing human \
   --proxy-list proxies.txt \
-  --viotp-token "your-token" \
   --output results.txt
 
 # Chạy nhanh (test, không pacing, không proxy)
@@ -85,5 +75,7 @@
 - **Pacing `human`** (120–300s giữa các lần): dùng cho production, IP tĩnh
 - **Pacing `fast`** (5–15s): dùng khi có rotating residential proxy
 - **Pacing `none`**: chỉ dùng khi test, dễ bị 429
+- ViOTP (`--viotp-token`, `--viotp-service-id`) và Codex (`--codex`) bị chặn fail-closed trong safe mode
+- Phone challenge hiện là detection-only (`phone_challenge`), không tự động thuê số/SMS OTP
 - Kết quả lưu tại `results.txt` theo format `email|password`
 - IMAP password phải là **App Password**, không phải password Gmail thường

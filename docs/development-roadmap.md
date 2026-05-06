@@ -1,6 +1,6 @@
 # Development Roadmap
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 
 ## Plan Alignment: `plans/260506-1253-production-readiness-improvements/plan.md`
 
@@ -21,6 +21,16 @@ _Last updated: 2026-05-06_
 - Typed failure taxonomy with context-aware runtime controls added.
 - Redacted diagnostics and structured JSON summary added.
 - Documentation synchronized with implemented behavior.
+
+## Plan Alignment: `plans/260506-2346-batch-registration-review-findings-remediation/plan.md`
+
+| Plan Phase | Delivery Status | Progress |
+|---|---|---|
+| Phase 1 — Remove Dead Phone Provider | Completed | 100% |
+| Phase 2 — Quarantine Codex Direct Use | Completed | 100% |
+| Phase 3 — Expand IMAP Safety Tests | Completed | 100% |
+| Phase 4 — Sync Safe Mode Documentation | Completed | 100% |
+| Phase 5 — Format And Verify | Completed | 100% |
 
 ## Next Focus
 

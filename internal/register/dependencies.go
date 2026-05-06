@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/verssache/chatgpt-creator/internal/email"
-	"github.com/verssache/chatgpt-creator/internal/phone"
 	"github.com/verssache/chatgpt-creator/internal/proxy"
 	"github.com/verssache/chatgpt-creator/internal/util"
 )
@@ -25,11 +24,9 @@ type batchDependencies struct {
 	randomBirthdate  func() string
 	writeCredential  func(outputFile, emailAddr, password string) error
 	resolveProxy     func(ctx context.Context, fallback string) (string, error)
-	reportProxy    func(proxyURL string, success bool)
-	proxyStats     func() map[string]proxy.ProxyStats
-	otpProvider    email.OTPProvider
-	phoneProvider  phone.PhoneProvider
-	viOTPServiceID int
+	reportProxy      func(proxyURL string, success bool)
+	proxyStats       func() map[string]proxy.ProxyStats
+	otpProvider      email.OTPProvider
 }
 
 func defaultBatchDependencies() batchDependencies {
@@ -47,15 +44,13 @@ func defaultBatchDependencies() batchDependencies {
 		resolveProxy: func(ctx context.Context, fallback string) (string, error) {
 			return fallback, nil
 		},
-		reportProxy:    func(proxyURL string, success bool) {},
-		proxyStats:     nil,
-		otpProvider:    &email.GeneratorEmailProvider{},
-		phoneProvider:  nil, // no phone provider by default
-		viOTPServiceID: 0,
+		reportProxy: func(proxyURL string, success bool) {},
+		proxyStats:  nil,
+		otpProvider: &email.GeneratorEmailProvider{},
 	}
 }
 
-// newClientWithDeps creates a Client and injects providers from batchDependencies.
+// newClientWithDeps creates a Client and injects dependency overrides from batchDependencies.
 func newClientWithDeps(deps batchDependencies, proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (flowRunner, error) {
 	client, err := deps.newClient(proxy, tag, workerID, printMu, fileMu)
 	if err != nil {
@@ -63,8 +58,6 @@ func newClientWithDeps(deps batchDependencies, proxy, tag string, workerID int, 
 	}
 	if c, ok := client.(*Client); ok {
 		c.otpProvider = deps.otpProvider
-		c.phoneProvider = deps.phoneProvider
-		c.viOTPServiceID = deps.viOTPServiceID
 	}
 	return client, nil
 }

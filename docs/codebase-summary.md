@@ -14,10 +14,10 @@ _Last updated: 2026-05-06_
 
 1. CLI parses flags via Cobra.
 2. Config is loaded from JSON with defaults and `PROXY` env override.
-3. Runtime options are validated.
+3. Runtime options are validated (safe mode fail-closed for ViOTP and Codex flags/config).
 4. Batch runner executes worker loop with context-aware controls.
 5. Each worker builds client, generates temp email, runs flow, writes credential line on success.
-6. Batch returns structured `BatchResult` with stop reason and failure summary.
+6. Batch returns structured `BatchResult` with stop reason, failure summary, and optional proxy stats.
 7. Optional `--json` emits summary to stdout while diagnostics go to stderr.
 
 ## Package-Level Summary
@@ -32,18 +32,19 @@ _Last updated: 2026-05-06_
 - Password length validation and environment override support.
 
 ### `internal/register`
-- `batch.go`: bounded runtime orchestration, retry controls, failure summary, stop reasons.
-- `failures.go`: typed failure taxonomy and classification helpers.
+- `batch.go`: bounded runtime orchestration, retry controls, failure summary, stop reasons, provider overrides for OTP/proxy pool only.
+- `failures.go`: typed failure taxonomy and classification helpers (including `phone_challenge` detection).
 - `retry.go`: context-aware wait and backoff delay.
 - `flow.go`: context-aware registration flow with typed failure wrapping.
 - `redact.go`: password/proxy/token log redaction helpers.
 - `logging.go`: diagnostic stream control.
-- `result.go`: `BatchResult` and `StopReason` model.
+- `result.go`: `BatchResult` and `StopReason` model (includes optional proxy stats snapshot).
 
 ### `internal/email`
 - Temp email creation and blacklist lifecycle.
 - OTP parser extracted for unit tests.
-- Context-aware OTP polling via `GetVerificationCodeWithContext`.
+- IMAP catch-all OTP provider with reconnect path and recipient-scoped mailbox search.
+- Context-aware OTP polling via `GetVerificationCodeWithContext` and `IMAPPooler.GetOTP`.
 
 ### `internal/sentinel`
 - Sentinel challenge request and token construction.

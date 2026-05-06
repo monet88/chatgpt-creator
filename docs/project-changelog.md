@@ -1,5 +1,23 @@
 # Project Changelog
 
+## 2026-05-07 — Batch Registration Review Remediation (Safe Mode)
+
+### Added
+- Offline fake-IMAP integration tests for recipient filtering, reconnect after dropped connection, concurrent `GetOTP`, and context cancellation.
+- Guard test ensuring `register.ProviderOptions` no longer exposes dead phone-provider fields.
+- Codex token exchange failure test verifying OAuth/token payload redaction.
+
+### Changed
+- Removed dead phone-provider wiring from batch dependency/client injection path.
+- Hardened Codex `ExchangeCode` error output to status-only (no raw response body leakage).
+- Updated TODO and docs to reflect safe-mode fail-closed behavior for ViOTP and Codex.
+
+### Validation
+- `go test ./internal/register ./cmd/register` passed.
+- `go test ./internal/codex ./cmd/register ./internal/register` passed.
+- `go test ./internal/email` passed.
+- `go test -race ./internal/email` passed.
+
 ## 2026-05-06 — Production Readiness Improvements
 
 ### Added

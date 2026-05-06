@@ -69,6 +69,7 @@ func AddBlacklistDomain(domain string) {
 	blacklistedDomains.Store(domain, true)
 	saveBlacklist()
 }
+
 // CreateTempEmail fetches a new temp email using a random profile and gofakeit names.
 func CreateTempEmail(defaultDomain string) (string, error) {
 	// If defaultDomain is set, skip fetching from generator.email
@@ -157,8 +158,6 @@ func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
 
 	return otp, nil
 }
-
-
 
 // GetVerificationCode polls generator.email for the OTP using a custom cookie.
 func GetVerificationCode(email string, maxRetries int, delay time.Duration) (string, error) {

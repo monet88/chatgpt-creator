@@ -1,5 +1,10 @@
 # ViOTP API Documentation
 
+> ⚠️ **Runtime status (safe mode): unsupported**
+> - Tài liệu này chỉ để tham khảo API ViOTP.
+> - Batch runtime hiện tại fail-closed khi nhận `viotp_token` hoặc `viotp_service_id`.
+> - Phone challenge hiện là detection-only (`phone_challenge`), không tự động thuê số/nhận OTP qua ViOTP.
+
 > **Lưu ý !**
 > - Sử dụng giao thức GET cho mọi truy vấn.
 > - Dữ liệu trả về dưới dạng JSON.

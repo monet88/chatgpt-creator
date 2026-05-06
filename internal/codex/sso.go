@@ -158,7 +158,7 @@ func ExchangeCode(ctx context.Context, cfg SSOConfig, code string, verifier stri
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("sso: token exchange failed (status=%d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("sso: token exchange failed (status=%d)", resp.StatusCode)
 	}
 
 	var result TokenResult

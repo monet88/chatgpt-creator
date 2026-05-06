@@ -23,7 +23,7 @@ CLI (cmd/register)
 
 1. Parse flags / choose interactive fallback.
 2. Load config and apply precedence (`defaults < file < env < flags`).
-3. Validate runtime inputs.
+3. Validate runtime inputs (fail-closed when ViOTP/Codex options are supplied in safe mode).
 4. Start workers and execute attempts under options:
    - max attempts
    - max consecutive failures
@@ -51,12 +51,14 @@ Typed kinds:
 - `network`
 - `validation`
 - `output_write`
+- `phone_challenge`
 
 ## Observability and Output
 
 - Diagnostics: timestamped worker logs
 - Log safety: newline sanitization + token/password-like redaction
 - JSON mode: summary on stdout, diagnostics on stderr
+- JSON summary includes optional per-proxy stats when proxy pool is enabled
 - Credential persistence format unchanged
 
 ## External Interfaces
