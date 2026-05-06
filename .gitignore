@@ -16,3 +16,4 @@ plans
 repomix-output.xml
 release-manifest.json
 .repomixignore
+.agents
