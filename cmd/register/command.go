@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/monet88/chatgpt-creator/internal/config"
+	"github.com/monet88/chatgpt-creator/internal/email"
+	proxypool "github.com/monet88/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/register"
 	"github.com/spf13/cobra"
-	"github.com/verssache/chatgpt-creator/internal/config"
-	"github.com/verssache/chatgpt-creator/internal/email"
-	proxypool "github.com/verssache/chatgpt-creator/internal/proxy"
-	"github.com/verssache/chatgpt-creator/internal/register"
 )
 
 const (
@@ -173,7 +173,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: %w", loadErr)}
 				}
 				cooldownSec := proxyCooldown
-				if cfg.ProxyCooldown > 0 && cooldownSec == 300 {
+				if cfg.ProxyCooldown > 0 && !cmd.Flags().Changed("proxy-cooldown") {
 					cooldownSec = cfg.ProxyCooldown
 				}
 				pool, poolErr := proxypool.NewRoundRobinPool(proxies, time.Duration(cooldownSec)*time.Second)

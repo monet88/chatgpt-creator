@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/proxy"
 )
 
 type fakeFlowRunner struct {

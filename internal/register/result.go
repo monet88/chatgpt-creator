@@ -1,6 +1,6 @@
 package register
 
-import "github.com/verssache/chatgpt-creator/internal/proxy"
+import "github.com/monet88/chatgpt-creator/internal/proxy"
 
 type StopReason string
 

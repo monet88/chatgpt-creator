@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/email"
-	proxypkg "github.com/verssache/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/email"
+	proxypkg "github.com/monet88/chatgpt-creator/internal/proxy"
 )
 
 type BatchOptions struct {

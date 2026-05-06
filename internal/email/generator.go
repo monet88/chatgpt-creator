@@ -20,7 +20,7 @@ import (
 	"github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 
-	"github.com/verssache/chatgpt-creator/internal/util"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 var (

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
-	"github.com/verssache/chatgpt-creator/internal/sentinel"
-	"github.com/verssache/chatgpt-creator/internal/util"
+	"github.com/monet88/chatgpt-creator/internal/sentinel"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 // visitHomepage visits chatgpt.com to initialize session

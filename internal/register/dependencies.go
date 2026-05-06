@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/email"
-	"github.com/verssache/chatgpt-creator/internal/proxy"
-	"github.com/verssache/chatgpt-creator/internal/util"
+	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 type flowRunner interface {

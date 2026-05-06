@@ -18,7 +18,7 @@ CLI tool for batch ChatGPT account registration with bounded retries, typed fail
 ### Install
 
 ```bash
-git clone https://github.com/verssache/chatgpt-creator.git
+git clone https://github.com/monet88/chatgpt-creator.git
 cd chatgpt-creator
 go mod download
 ```

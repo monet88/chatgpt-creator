@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **chatgpt-creator** (1168 symbols, 2157 relationships, 97 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **chatgpt-creator** (1274 symbols, 2385 relationships, 101 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -39,11 +39,5 @@ This project is indexed by GitNexus as **chatgpt-creator** (1168 symbols, 2157 r
 | Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
 | Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-| Work in the Register area (79 symbols) | `.claude/skills/generated/register/SKILL.md` |
-| Work in the Email area (25 symbols) | `.claude/skills/generated/email/SKILL.md` |
-| Work in the Proxy area (21 symbols) | `.claude/skills/generated/proxy/SKILL.md` |
-| Work in the Codex area (19 symbols) | `.claude/skills/generated/codex/SKILL.md` |
-| Work in the Phone area (15 symbols) | `.claude/skills/generated/phone/SKILL.md` |
-| Work in the Sentinel area (8 symbols) | `.claude/skills/generated/sentinel/SKILL.md` |
 
 <!-- gitnexus:end -->

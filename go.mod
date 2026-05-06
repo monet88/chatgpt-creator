@@ -1,4 +1,4 @@
-module github.com/verssache/chatgpt-creator
+module github.com/monet88/chatgpt-creator
 
 go 1.25.5
 

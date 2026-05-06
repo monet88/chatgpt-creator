@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/register"
+	"github.com/monet88/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/register"
 )
 
 type batchCall struct {
@@ -155,6 +157,38 @@ func TestCommand_FlagOverridesEnvProxy(t *testing.T) {
 	}
 	if capturedProxy != "http://flag:8080" {
 		t.Fatalf("proxy = %q", capturedProxy)
+	}
+}
+
+func TestCommand_ExplicitProxyCooldownOverridesConfigDefaultValue(t *testing.T) {
+	tempDir := t.TempDir()
+	proxyListPath := filepath.Join(tempDir, "proxies.txt")
+	if err := os.WriteFile(proxyListPath, []byte("http://proxy.example:8080\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(proxy list) error = %v", err)
+	}
+	configPath := filepath.Join(tempDir, "config.json")
+	configContent := []byte(`{"proxy_list":"` + proxyListPath + `","proxy_cooldown":10}`)
+	if err := os.WriteFile(configPath, configContent, 0o644); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	var stats map[string]proxy.ProxyStats
+	before := time.Now()
+	prevRunBatch := runBatchWithProviders
+	runBatchWithProviders = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxyURL, defaultPassword, defaultDomain string, opts register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
+		providers.ProxyPool.Report("http://proxy.example:8080", false)
+		stats = providers.ProxyPool.Stats()
+		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
+	}
+	t.Cleanup(func() { runBatchWithProviders = prevRunBatch })
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1", "--proxy-cooldown", "300"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, stderr = %q", exitCode, stderr)
+	}
+	coolUntil := stats["http://proxy.example:8080"].CoolUntil
+	if coolUntil.Before(before.Add(250 * time.Second)) {
+		t.Fatalf("cooldown = %v, want explicit 300s flag over config", coolUntil.Sub(before))
 	}
 }
 

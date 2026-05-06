@@ -10,8 +10,8 @@ import (
 	"github.com/bogdanfinn/tls-client"
 	"github.com/google/uuid"
 
-	"github.com/verssache/chatgpt-creator/internal/chrome"
-	"github.com/verssache/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/chrome"
+	"github.com/monet88/chatgpt-creator/internal/email"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/util"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 func waitWithContext(ctx context.Context, delay time.Duration) error {
