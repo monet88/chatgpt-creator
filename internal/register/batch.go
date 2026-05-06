@@ -10,6 +10,7 @@ import (
 
 	"github.com/verssache/chatgpt-creator/internal/email"
 	"github.com/verssache/chatgpt-creator/internal/phone"
+	proxypkg "github.com/verssache/chatgpt-creator/internal/proxy"
 )
 
 type BatchOptions struct {
@@ -105,6 +106,7 @@ type ProviderOptions struct {
 	ProxyPool interface {
 		Next(ctx context.Context) (string, error)
 		Report(proxyURL string, success bool)
+		Stats() map[string]proxypkg.ProxyStats
 	}
 	// OTPProvider overrides the default generator.email OTP retrieval.
 	OTPProvider email.OTPProvider
@@ -112,10 +114,6 @@ type ProviderOptions struct {
 	PhoneProvider phone.PhoneProvider
 	// ViOTPServiceID is the ViOTP service ID for OpenAI.
 	ViOTPServiceID int
-	// CodexExtractor enables post-registration Codex token extraction.
-	CodexExtractor codexExtractor
-	// CodexOutputFile is the path for extracted Codex tokens.
-	CodexOutputFile string
 }
 
 // RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
@@ -129,10 +127,6 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.phoneProvider = providers.PhoneProvider
 		deps.viOTPServiceID = providers.ViOTPServiceID
 	}
-	if providers.CodexExtractor != nil {
-		deps.codexExtractor = providers.CodexExtractor
-		deps.codexOutputFile = providers.CodexOutputFile
-	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool
 		deps.resolveProxy = func(ctx context.Context, fallback string) (string, error) {
@@ -141,6 +135,7 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.reportProxy = func(proxyURL string, success bool) {
 			pool.Report(proxyURL, success)
 		}
+		deps.proxyStats = pool.Stats
 	}
 
 	return RunBatchWithOptions(
@@ -322,6 +317,17 @@ func RunBatchWithOptions(ctx context.Context, totalAccounts int, outputFile stri
 	}
 
 	elapsed := time.Since(startTime)
+	var proxyStats map[string]proxypkg.ProxyStats
+	if deps.proxyStats != nil {
+		snapshot := deps.proxyStats()
+		if len(snapshot) > 0 {
+			proxyStats = make(map[string]proxypkg.ProxyStats, len(snapshot))
+			for key, value := range snapshot {
+				proxyStats[key] = value
+			}
+		}
+	}
+
 	result := BatchResult{
 		Target:         totalAccounts,
 		Success:        successCount,
@@ -331,6 +337,7 @@ func RunBatchWithOptions(ctx context.Context, totalAccounts int, outputFile stri
 		StopReason:     stopReason,
 		OutputFile:     outputFile,
 		FailureSummary: failureSummary,
+		ProxyStats:     proxyStats,
 	}
 
 	diagnosticPrintf("\n--- Batch Registration Summary ---\n")

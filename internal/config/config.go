@@ -106,6 +106,12 @@ func Load(path string) (*Config, error) {
 			cfg.ProxyCooldown = sec
 		}
 	}
+	if v := os.Getenv("CODEX_ENABLED"); v != "" {
+		cfg.CodexEnabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("CODEX_OUTPUT"); v != "" {
+		cfg.CodexOutput = v
+	}
 
 	return cfg, nil
 }

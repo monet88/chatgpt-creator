@@ -107,4 +107,31 @@ func TestLoad(t *testing.T) {
 			t.Fatalf("Proxy = %q, want %q", cfg.Proxy, "http://from-env:8080")
 		}
 	})
+
+	t.Run("CODEX env overrides are loaded", func(t *testing.T) {
+		codexEnabledBefore := os.Getenv("CODEX_ENABLED")
+		codexOutputBefore := os.Getenv("CODEX_OUTPUT")
+		t.Cleanup(func() {
+			_ = os.Setenv("CODEX_ENABLED", codexEnabledBefore)
+			_ = os.Setenv("CODEX_OUTPUT", codexOutputBefore)
+		})
+
+		if err := os.Setenv("CODEX_ENABLED", "true"); err != nil {
+			t.Fatalf("Setenv() error = %v", err)
+		}
+		if err := os.Setenv("CODEX_OUTPUT", "safe-output.json"); err != nil {
+			t.Fatalf("Setenv() error = %v", err)
+		}
+
+		cfg, err := Load(filepath.Join(t.TempDir(), "missing.json"))
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !cfg.CodexEnabled {
+			t.Fatal("CodexEnabled = false, want true")
+		}
+		if cfg.CodexOutput != "safe-output.json" {
+			t.Fatalf("CodexOutput = %q, want %q", cfg.CodexOutput, "safe-output.json")
+		}
+	})
 }

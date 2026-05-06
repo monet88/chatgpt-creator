@@ -13,10 +13,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/verssache/chatgpt-creator/internal/codex"
 	"github.com/verssache/chatgpt-creator/internal/config"
 	"github.com/verssache/chatgpt-creator/internal/email"
-	"github.com/verssache/chatgpt-creator/internal/phone"
 	proxypool "github.com/verssache/chatgpt-creator/internal/proxy"
 	"github.com/verssache/chatgpt-creator/internal/register"
 )
@@ -107,7 +105,64 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --proxy and --proxy-list are mutually exclusive")}
 			}
 
-			// Initialize proxy pool if --proxy-list is set
+			effectiveOutput := cfg.OutputFile
+			if cmd.Flags().Changed("output") {
+				effectiveOutput = outputFile
+			}
+
+			effectivePassword := cfg.DefaultPassword
+			if cmd.Flags().Changed("password") {
+				effectivePassword = password
+			}
+
+			effectiveDomain := cfg.DefaultDomain
+			if cmd.Flags().Changed("domain") {
+				effectiveDomain = domain
+			}
+
+			hasActionableFlags := cmd.Flags().Changed("total") ||
+				cmd.Flags().Changed("workers") ||
+				cmd.Flags().Changed("proxy") ||
+				cmd.Flags().Changed("proxy-list") ||
+				cmd.Flags().Changed("proxy-cooldown") ||
+				cmd.Flags().Changed("output") ||
+				cmd.Flags().Changed("password") ||
+				cmd.Flags().Changed("domain") ||
+				cmd.Flags().Changed("pacing") ||
+				cmd.Flags().Changed("json") ||
+				cmd.Flags().Changed("imap-host") ||
+				cmd.Flags().Changed("imap-port") ||
+				cmd.Flags().Changed("imap-user") ||
+				cmd.Flags().Changed("imap-password") ||
+				cmd.Flags().Changed("imap-tls") ||
+				cmd.Flags().Changed("viotp-token") ||
+				cmd.Flags().Changed("viotp-service-id") ||
+				cmd.Flags().Changed("codex") ||
+				cmd.Flags().Changed("codex-output")
+			if interactive || !hasActionableFlags {
+				return runInteractive(in, out, errOut, cfg, effectiveOutput)
+			}
+
+			effectiveViOTPToken := cfg.ViOTPToken
+			if cmd.Flags().Changed("viotp-token") {
+				effectiveViOTPToken = viOTPToken
+			}
+			effectiveViOTPServiceID := cfg.ViOTPServiceID
+			if cmd.Flags().Changed("viotp-service-id") {
+				effectiveViOTPServiceID = viOTPServiceID
+			}
+			if effectiveViOTPToken != "" || effectiveViOTPServiceID > 0 {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: viotp phone challenge automation is not supported in safe mode")}
+			}
+
+			effectiveCodexEnabled := cfg.CodexEnabled
+			if cmd.Flags().Changed("codex") {
+				effectiveCodexEnabled = codexEnabled
+			}
+			if effectiveCodexEnabled {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: codex extraction is not supported in safe mode")}
+			}
+
 			var proxyPool *proxypool.RoundRobinPool
 			if effectiveProxyList != "" {
 				proxies, loadErr := proxypool.LoadProxies(effectiveProxyList)
@@ -127,7 +182,6 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				proxyPool = proxypool.NewSinglePool(effectiveProxy)
 			}
 
-			// Build IMAP OTP provider if configured
 			effectiveIMAPHost := cfg.IMAPHost
 			if cmd.Flags().Changed("imap-host") {
 				effectiveIMAPHost = imapHost
@@ -165,54 +219,6 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				otpProvider = pooler
 			}
 
-			// Build ViOTP phone provider if token set
-			effectiveViOTPToken := cfg.ViOTPToken
-			if cmd.Flags().Changed("viotp-token") {
-				effectiveViOTPToken = viOTPToken
-			}
-			effectiveViOTPServiceID := cfg.ViOTPServiceID
-			if cmd.Flags().Changed("viotp-service-id") {
-				effectiveViOTPServiceID = viOTPServiceID
-			}
-			var phoneProvider phone.PhoneProvider
-			if effectiveViOTPToken != "" {
-				phoneProvider = phone.NewViOTPClient(effectiveViOTPToken)
-			}
-
-			// Build Codex extractor if enabled
-			effectiveCodexEnabled := cfg.CodexEnabled
-			if cmd.Flags().Changed("codex") {
-				effectiveCodexEnabled = codexEnabled
-			}
-			effectiveCodexOutput := cfg.CodexOutput
-			if cmd.Flags().Changed("codex-output") {
-				effectiveCodexOutput = codexOutput
-			}
-			var codexExtractor *codex.Extractor
-			if effectiveCodexEnabled {
-				codexExtractor = codex.NewExtractor(effectiveCodexOutput)
-			}
-
-			effectiveOutput := cfg.OutputFile
-			if cmd.Flags().Changed("output") {
-				effectiveOutput = outputFile
-			}
-
-			effectivePassword := cfg.DefaultPassword
-			if cmd.Flags().Changed("password") {
-				effectivePassword = password
-			}
-
-			effectiveDomain := cfg.DefaultDomain
-			if cmd.Flags().Changed("domain") {
-				effectiveDomain = domain
-			}
-
-			hasActionableFlags := cmd.Flags().Changed("total") || cmd.Flags().Changed("workers") || cmd.Flags().Changed("proxy") || cmd.Flags().Changed("proxy-list") || cmd.Flags().Changed("output") || cmd.Flags().Changed("password") || cmd.Flags().Changed("domain") || cmd.Flags().Changed("pacing") || cmd.Flags().Changed("json") || cmd.Flags().Changed("imap-host") || cmd.Flags().Changed("viotp-token") || cmd.Flags().Changed("codex")
-			if interactive || !hasActionableFlags {
-				return runInteractive(in, out, errOut, cfg, effectiveOutput)
-			}
-
 			if total <= 0 {
 				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --total must be greater than 0")}
 			}
@@ -239,16 +245,10 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			}
 
 			providers := register.ProviderOptions{
-				OTPProvider:     otpProvider,
-				PhoneProvider:   phoneProvider,
-				ViOTPServiceID:  effectiveViOTPServiceID,
-				CodexOutputFile: effectiveCodexOutput,
+				OTPProvider: otpProvider,
 			}
 			if proxyPool != nil {
 				providers.ProxyPool = proxyPool
-			}
-			if codexExtractor != nil {
-				providers.CodexExtractor = codexExtractor
 			}
 
 			if jsonMode {
@@ -422,8 +422,6 @@ func printBanner(out io.Writer) {
 `
 	fmt.Fprintln(out, banner)
 }
-
-
 
 func runMain() int {
 	return executeWithIO(os.Stdin, os.Stdout, os.Stderr)

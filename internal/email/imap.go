@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +46,13 @@ func NewIMAPPooler(cfg IMAPConfig) (*IMAPPooler, error) {
 }
 
 func (p *IMAPPooler) connect() error {
-	addr := fmt.Sprintf("%s:%d", p.config.Host, p.config.Port)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.connectLocked()
+}
+
+func (p *IMAPPooler) connectLocked() error {
+	addr := net.JoinHostPort(p.config.Host, strconv.Itoa(p.config.Port))
 
 	var conn net.Conn
 	var err error
@@ -62,13 +69,11 @@ func (p *IMAPPooler) connect() error {
 	p.reader = bufio.NewReader(conn)
 	p.tag = 0
 
-	// Read greeting
 	if _, err := p.readLine(); err != nil {
 		conn.Close()
 		return fmt.Errorf("imap: failed to read greeting: %w", err)
 	}
 
-	// LOGIN
 	resp, err := p.command(fmt.Sprintf("LOGIN %s %s", p.config.User, p.config.Password))
 	if err != nil {
 		conn.Close()
@@ -193,10 +198,24 @@ func (p *IMAPPooler) searchOTP(emailAddr string) (string, error) {
 }
 
 func (p *IMAPPooler) reconnect() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	var closeErr error
 	if p.conn != nil {
-		p.conn.Close()
+		closeErr = p.conn.Close()
 	}
-	return p.connect()
+	p.conn = nil
+	p.reader = nil
+
+	if err := p.connectLocked(); err != nil {
+		if closeErr != nil {
+			return fmt.Errorf("imap: reconnect failed after stale close error (%v): %w", closeErr, err)
+		}
+		return err
+	}
+
+	return nil
 }
 
 // Close logs out and closes the IMAP connection.

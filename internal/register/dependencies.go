@@ -7,19 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/verssache/chatgpt-creator/internal/codex"
 	"github.com/verssache/chatgpt-creator/internal/email"
 	"github.com/verssache/chatgpt-creator/internal/phone"
+	"github.com/verssache/chatgpt-creator/internal/proxy"
 	"github.com/verssache/chatgpt-creator/internal/util"
 )
 
 type flowRunner interface {
 	RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error
-}
-
-// codexExtractor runs the Codex SSO token extraction flow after registration.
-type codexExtractor interface {
-	Extract(ctx context.Context, emailAddr string) (*codex.TokenResult, error)
 }
 
 type batchDependencies struct {
@@ -30,12 +25,11 @@ type batchDependencies struct {
 	randomBirthdate  func() string
 	writeCredential  func(outputFile, emailAddr, password string) error
 	resolveProxy     func(ctx context.Context, fallback string) (string, error)
-	reportProxy      func(proxyURL string, success bool)
-	otpProvider      email.OTPProvider
-	phoneProvider    phone.PhoneProvider
-	viOTPServiceID   int
-	codexExtractor   codexExtractor
-	codexOutputFile  string
+	reportProxy    func(proxyURL string, success bool)
+	proxyStats     func() map[string]proxy.ProxyStats
+	otpProvider    email.OTPProvider
+	phoneProvider  phone.PhoneProvider
+	viOTPServiceID int
 }
 
 func defaultBatchDependencies() batchDependencies {
@@ -54,10 +48,10 @@ func defaultBatchDependencies() batchDependencies {
 			return fallback, nil
 		},
 		reportProxy:    func(proxyURL string, success bool) {},
+		proxyStats:     nil,
 		otpProvider:    &email.GeneratorEmailProvider{},
 		phoneProvider:  nil, // no phone provider by default
 		viOTPServiceID: 0,
-		codexExtractor: nil, // disabled by default
 	}
 }
 

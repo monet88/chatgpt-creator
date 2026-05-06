@@ -103,7 +103,8 @@ func ClassifyFailureKind(err error) FailureKind {
 		IsFailureKind(err, FailureUpstreamChanged) ||
 		IsFailureKind(err, FailureNetwork) ||
 		IsFailureKind(err, FailureValidation) ||
-		IsFailureKind(err, FailureOutputWrite) {
+		IsFailureKind(err, FailureOutputWrite) ||
+		IsFailureKind(err, FailurePhoneChallenge) {
 		failureErr, _ := AsFailure(err)
 		return failureErr.Kind
 	}
@@ -114,6 +115,10 @@ func ClassifyFailureKind(err error) FailureKind {
 		return FailureUnsupportedEmail
 	case strings.Contains(message, "verification code") && strings.Contains(message, "failed"):
 		return FailureOTPTimeout
+	case strings.Contains(message, "phone_challenge"):
+		return FailurePhoneChallenge
+	case strings.Contains(message, "phone") && (strings.Contains(message, "challenge") || strings.Contains(message, "verify") || strings.Contains(message, "verification")):
+		return FailurePhoneChallenge
 	case strings.Contains(message, "sentinel") || strings.Contains(message, "challenge"):
 		return FailureChallengeFailed
 	case strings.Contains(message, "429") || strings.Contains(message, "rate"):

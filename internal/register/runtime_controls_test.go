@@ -110,3 +110,17 @@ func TestFailureClassification(t *testing.T) {
 		t.Fatal("expected FailureOTPTimeout")
 	}
 }
+
+func TestClassifyStatusFailure_PhoneChallenge(t *testing.T) {
+	kind := classifyStatusFailure(403, map[string]interface{}{"error": "phone verification challenge required"})
+	if kind != FailurePhoneChallenge {
+		t.Fatalf("kind = %v, want %v", kind, FailurePhoneChallenge)
+	}
+}
+
+func TestClassifyFailureKind_PhoneChallenge(t *testing.T) {
+	err := NewFailure(FailurePhoneChallenge, "register", 403, errors.New("phone verification challenge required"))
+	if got := ClassifyFailureKind(err); got != FailurePhoneChallenge {
+		t.Fatalf("got = %v, want %v", got, FailurePhoneChallenge)
+	}
+}

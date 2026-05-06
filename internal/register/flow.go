@@ -449,10 +449,21 @@ func classifyStatusFailure(status int, data map[string]interface{}) FailureKind 
 	if strings.Contains(message, "unsupported_email") {
 		return FailureUnsupportedEmail
 	}
+	if isPhoneChallengeMessage(message) {
+		return FailurePhoneChallenge
+	}
 	if strings.Contains(message, "challenge") || strings.Contains(message, "sentinel") {
 		return FailureChallengeFailed
 	}
 	return FailureUpstreamChanged
+}
+
+func isPhoneChallengeMessage(message string) bool {
+	hasPhoneSignal := strings.Contains(message, "phone") || strings.Contains(message, "sms") || strings.Contains(message, "otp")
+	if !hasPhoneSignal {
+		return false
+	}
+	return strings.Contains(message, "challenge") || strings.Contains(message, "verify") || strings.Contains(message, "verification")
 }
 
 func (c *Client) randomDelayWithContext(ctx context.Context, low, high float64) error {

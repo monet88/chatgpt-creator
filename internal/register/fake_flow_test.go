@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/verssache/chatgpt-creator/internal/proxy"
 )
 
 type fakeFlowRunner struct {
@@ -121,5 +124,49 @@ func TestRegisterOne_WriteFailureReturnsError(t *testing.T) {
 	}
 	if runErr == nil || !strings.Contains(runErr.Error(), "failed to write to output file") {
 		t.Fatalf("runErr = %v", runErr)
+	}
+}
+
+func TestRunBatchWithOptions_ProxyStatsSnapshot(t *testing.T) {
+	statsSnapshot := map[string]proxy.ProxyStats{
+		"http://proxy-1:8080": {
+			URL:      "http://proxy-1:8080",
+			Success:  1,
+			Failures: 0,
+		},
+	}
+	deps := baseDeps(t, nil, appendCredential)
+	deps.resolveProxy = func(ctx context.Context, fallback string) (string, error) {
+		return "http://proxy-1:8080", nil
+	}
+	deps.proxyStats = func() map[string]proxy.ProxyStats {
+		result := make(map[string]proxy.ProxyStats, len(statsSnapshot))
+		for key, value := range statsSnapshot {
+			result[key] = value
+		}
+		return result
+	}
+	deps.reportProxy = func(proxyURL string, success bool) {
+		entry := statsSnapshot[proxyURL]
+		entry.URL = proxyURL
+		if success {
+			entry.Success++
+		} else {
+			entry.Failures++
+			entry.CoolUntil = time.Now().Add(5 * time.Minute)
+		}
+		statsSnapshot[proxyURL] = entry
+	}
+
+	result := RunBatchWithOptions(context.Background(), 1, filepath.Join(t.TempDir(), "results.txt"), 1, "", "", "", deps, BatchOptions{MaxAttempts: 4, MaxConsecutiveFailures: 1, PerAccountTimeout: 30 * time.Second, RetryBaseDelay: 0, PacingProfile: PacingNone})
+	if len(result.ProxyStats) == 0 {
+		t.Fatal("expected proxy stats in result")
+	}
+	entry, ok := result.ProxyStats["http://proxy-1:8080"]
+	if !ok {
+		t.Fatal("missing proxy stats for proxy-1")
+	}
+	if entry.Success < 2 {
+		t.Fatalf("success count = %d, want >= 2", entry.Success)
 	}
 }

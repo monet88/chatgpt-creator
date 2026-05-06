@@ -191,3 +191,113 @@ func TestCommand_InteractiveFallbackUsesStdin(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
+
+func TestCommand_CodexFlagFailsClosed(t *testing.T) {
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "codex extraction is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_CodexConfigFailsClosed(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	content := []byte(`{"codex_enabled":true}`)
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "codex extraction is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_ViOTPFlagFailsClosed(t *testing.T) {
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--viotp-token", "token"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "viotp phone challenge automation is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_ViOTPConfigFailsClosed(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	content := []byte(`{"viotp_token":"token-from-config"}`)
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "viotp phone challenge automation is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_ActionableFlagsSkipInteractiveFallback(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+	}{
+		{name: "proxy cooldown", args: []string{"--proxy-cooldown", "10"}},
+		{name: "imap port", args: []string{"--imap-port", "993"}},
+		{name: "imap user", args: []string{"--imap-user", "user@example.com"}},
+		{name: "codex output", args: []string{"--codex-output", "unused.json"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			exitCode, stdout, stderr := executeCommandForTest(t, tc.args, "")
+			if exitCode != exitCodeValidation {
+				t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+			}
+			if !strings.Contains(stderr, "--total must be greater than 0") {
+				t.Fatalf("stderr = %q", stderr)
+			}
+			if strings.Contains(stdout, "Total accounts to register:") {
+				t.Fatalf("unexpected interactive prompt in stdout: %q", stdout)
+			}
+		})
+	}
+}
+
+func TestCommand_InteractiveFallbackBeforeIMAPInit(t *testing.T) {
+	var called bool
+	prevRunBatchForCLI := runBatchForCLI
+	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts register.BatchOptions) register.BatchResult {
+		called = true
+		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
+	}
+	t.Cleanup(func() { runBatchForCLI = prevRunBatchForCLI })
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	content := []byte(`{"imap_host":"localhost","imap_user":"user","imap_password":"pass","imap_port":65535,"imap_use_tls":false}`)
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	input := strings.Join([]string{"", "1", "", "supersecurepass", "", ""}, "\n") + "\n"
+	exitCode, stdout, stderr := executeCommandForTest(t, []string{"--config", configPath}, input)
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, stderr = %q", exitCode, stderr)
+	}
+	if !called {
+		t.Fatal("runBatch was not called")
+	}
+	if !strings.Contains(stdout, "Total accounts to register:") {
+		t.Fatalf("stdout = %q", stdout)
+	}
+	if strings.Contains(stderr, "IMAP connection failed") {
+		t.Fatalf("stderr should not include IMAP init error: %q", stderr)
+	}
+}
