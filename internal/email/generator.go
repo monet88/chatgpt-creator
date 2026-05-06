@@ -158,20 +158,7 @@ func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
 	return otp, nil
 }
 
-func waitWithContext(ctx context.Context, delay time.Duration) error {
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 // GetVerificationCode polls generator.email for the OTP using a custom cookie.
 func GetVerificationCode(email string, maxRetries int, delay time.Duration) (string, error) {
@@ -213,7 +200,7 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 
 		resp, err := client.Do(req)
 		if err != nil {
-			if waitWithContext(ctx, delay) != nil {
+			if util.WaitWithContext(ctx, delay) != nil {
 				return "", ctx.Err()
 			}
 			continue
@@ -221,7 +208,7 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			if waitWithContext(ctx, delay) != nil {
+			if util.WaitWithContext(ctx, delay) != nil {
 				return "", ctx.Err()
 			}
 			continue
@@ -230,7 +217,7 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 		otp, err := parseVerificationCodeFromHTML(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			if waitWithContext(ctx, delay) != nil {
+			if util.WaitWithContext(ctx, delay) != nil {
 				return "", ctx.Err()
 			}
 			continue
@@ -240,7 +227,7 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 			return otp, nil
 		}
 
-		if waitWithContext(ctx, delay) != nil {
+		if util.WaitWithContext(ctx, delay) != nil {
 			return "", ctx.Err()
 		}
 	}

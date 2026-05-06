@@ -3,15 +3,15 @@ package register
 import "testing"
 
 func TestRedactHelpers(t *testing.T) {
-	if got := redactPassword("secret-password"); got != "[redacted]" {
-		t.Fatalf("redactPassword() = %q", got)
+	if got := RedactPassword("secret-password"); got != "[redacted]" {
+		t.Fatalf("RedactPassword() = %q", got)
 	}
-	if got := redactPassword(""); got != "(random)" {
-		t.Fatalf("redactPassword(empty) = %q", got)
+	if got := RedactPassword(""); got != "(random)" {
+		t.Fatalf("RedactPassword(empty) = %q", got)
 	}
 
 	proxy := "http://user:pass@example.com:8080"
-	gotProxy := redactProxy(proxy)
+	gotProxy := RedactProxy(proxy)
 	if gotProxy == proxy {
 		t.Fatalf("proxy not redacted: %q", gotProxy)
 	}

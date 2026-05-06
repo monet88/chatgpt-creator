@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -214,10 +213,10 @@ func runInteractive(in io.Reader, out, errOut io.Writer, cfg *config.Config, out
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "-------------------------------------------")
 	fmt.Fprintln(out, "Configuration:")
-	fmt.Fprintf(out, "  Proxy:          %s\n", redactProxyForDisplay(proxy))
+	fmt.Fprintf(out, "  Proxy:          %s\n", register.RedactProxy(proxy))
 	fmt.Fprintf(out, "  Total Accounts: %d\n", totalAccounts)
 	fmt.Fprintf(out, "  Max Workers:    %d\n", maxWorkers)
-	fmt.Fprintf(out, "  Password:       %s\n", redactPasswordForDisplay(defaultPassword))
+	fmt.Fprintf(out, "  Password:       %s\n", register.RedactPassword(defaultPassword))
 	if defaultDomain != "" {
 		fmt.Fprintf(out, "  Domain:         %s\n", defaultDomain)
 	} else {
@@ -246,26 +245,7 @@ func printBanner(out io.Writer) {
 	fmt.Fprintln(out, banner)
 }
 
-func redactPasswordForDisplay(password string) string {
-	if password == "" {
-		return "(random)"
-	}
-	return "[redacted]"
-}
 
-func redactProxyForDisplay(proxy string) string {
-	if proxy == "" {
-		return ""
-	}
-	parsed, err := url.Parse(proxy)
-	if err != nil {
-		return "[redacted]"
-	}
-	if parsed.User != nil {
-		parsed.User = url.UserPassword("[redacted]", "[redacted]")
-	}
-	return parsed.String()
-}
 
 func runMain() int {
 	return executeWithIO(os.Stdin, os.Stdout, os.Stderr)

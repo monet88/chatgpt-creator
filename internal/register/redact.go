@@ -8,14 +8,16 @@ import (
 
 var tokenLikePattern = regexp.MustCompile(`(?i)(token|cookie|authorization|password)\s*[:=]\s*[^\s,;]+`)
 
-func redactPassword(password string) string {
+// RedactPassword returns "[redacted]" for non-empty passwords or "(random)" for empty.
+func RedactPassword(password string) string {
 	if password == "" {
 		return "(random)"
 	}
 	return "[redacted]"
 }
 
-func redactProxy(proxy string) string {
+// RedactProxy strips userinfo credentials from proxy URLs.
+func RedactProxy(proxy string) string {
 	if proxy == "" {
 		return ""
 	}

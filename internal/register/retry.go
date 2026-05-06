@@ -4,21 +4,12 @@ import (
 	"context"
 	"math/rand"
 	"time"
+
+	"github.com/verssache/chatgpt-creator/internal/util"
 )
 
 func waitWithContext(ctx context.Context, delay time.Duration) error {
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+	return util.WaitWithContext(ctx, delay)
 }
 
 func backoffDelay(baseDelay time.Duration, attempt int) time.Duration {

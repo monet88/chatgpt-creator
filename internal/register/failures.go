@@ -75,13 +75,15 @@ func WrapFailure(step string, status int, err error) error {
 		return nil
 	}
 	if failureErr, ok := AsFailure(err); ok {
-		if failureErr.Step == "" {
-			failureErr.Step = step
+		// Clone to avoid mutating a shared error pointer across goroutines.
+		clone := *failureErr
+		if clone.Step == "" {
+			clone.Step = step
 		}
-		if failureErr.Status == 0 {
-			failureErr.Status = status
+		if clone.Status == 0 {
+			clone.Status = status
 		}
-		return failureErr
+		return &clone
 	}
 	return NewFailure(ClassifyFailureKind(err), step, status, err)
 }
