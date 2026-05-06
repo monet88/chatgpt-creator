@@ -52,10 +52,18 @@ func (p *IMAPPooler) connect() error {
 }
 
 func (p *IMAPPooler) connectLocked() error {
+	user, err := quoteIMAPString(p.config.User)
+	if err != nil {
+		return fmt.Errorf("imap: invalid username: %w", err)
+	}
+	password, err := quoteIMAPString(p.config.Password)
+	if err != nil {
+		return fmt.Errorf("imap: invalid password: %w", err)
+	}
+
 	addr := net.JoinHostPort(p.config.Host, strconv.Itoa(p.config.Port))
 
 	var conn net.Conn
-	var err error
 	if p.config.UseTLS {
 		conn, err = tls.Dial("tcp", addr, &tls.Config{ServerName: p.config.Host})
 	} else {
@@ -74,7 +82,7 @@ func (p *IMAPPooler) connectLocked() error {
 		return fmt.Errorf("imap: failed to read greeting: %w", err)
 	}
 
-	resp, err := p.command(fmt.Sprintf("LOGIN %s %s", p.config.User, p.config.Password))
+	resp, err := p.command(fmt.Sprintf("LOGIN %s %s", user, password))
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("imap: login failed: %w", err)
@@ -85,6 +93,17 @@ func (p *IMAPPooler) connectLocked() error {
 	}
 
 	return nil
+}
+
+func quoteIMAPString(value string) (string, error) {
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return "", fmt.Errorf("value contains ASCII control character")
+		}
+	}
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `"`, `\"`)
+	return `"` + value + `"`, nil
 }
 
 func (p *IMAPPooler) command(cmd string) (string, error) {
@@ -154,6 +173,11 @@ func (p *IMAPPooler) GetOTP(ctx context.Context, emailAddr string, timeout time.
 }
 
 func (p *IMAPPooler) searchOTP(emailAddr string) (string, error) {
+	quotedEmailAddr, err := quoteIMAPString(emailAddr)
+	if err != nil {
+		return "", fmt.Errorf("imap: invalid target email: %w", err)
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -167,7 +191,7 @@ func (p *IMAPPooler) searchOTP(emailAddr string) (string, error) {
 	}
 
 	// SEARCH for unseen messages TO the target email
-	searchResp, err := p.command(fmt.Sprintf(`SEARCH UNSEEN TO "%s"`, emailAddr))
+	searchResp, err := p.command(fmt.Sprintf("SEARCH UNSEEN TO %s", quotedEmailAddr))
 	if err != nil {
 		return "", err
 	}

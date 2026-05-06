@@ -162,6 +162,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			if effectiveCodexEnabled {
 				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: codex extraction is not supported in safe mode")}
 			}
+			if cmd.Flags().Changed("codex-output") || cfg.CodexOutput != config.DefaultCodexOutput {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: codex output is not supported in safe mode")}
+			}
 
 			var proxyPool *proxypool.RoundRobinPool
 			if effectiveProxyList != "" {
@@ -304,7 +307,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&imapTLS, "imap-tls", true, "Use TLS for IMAP connection")
 	// Codex flags
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
-	cmd.Flags().StringVar(&codexOutput, "codex-output", "codex-tokens.json", "Output file for Codex tokens")
+	cmd.Flags().StringVar(&codexOutput, "codex-output", config.DefaultCodexOutput, "Unsupported in safe mode; Codex token output path")
 
 	return cmd
 }

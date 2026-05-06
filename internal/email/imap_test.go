@@ -334,6 +334,22 @@ func TestIMAPPooler_GetOTP_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestIMAPPooler_GetOTP_RejectsTargetEmailControlCharacters(t *testing.T) {
+	server := newFakeIMAPServer(t, nil, false)
+	defer server.close()
+
+	pooler := newIMAPPoolerForTest(t, server.addr())
+	defer pooler.Close()
+
+	_, err := pooler.GetOTP(context.Background(), "target\r@example.com", 300*time.Millisecond)
+	if err == nil {
+		t.Fatal("GetOTP() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "invalid target email") {
+		t.Fatalf("err = %q, want invalid target email", err.Error())
+	}
+}
+
 func TestParseSearchResponse(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -416,6 +432,51 @@ func TestOTPRegex(t *testing.T) {
 				t.Fatalf("OTP = %q, want %q", matches[0], tc.expected)
 			}
 		})
+	}
+}
+
+func TestQuoteIMAPString(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		expect  string
+		wantErr bool
+	}{
+		{name: "plain", input: "user", expect: `"user"`},
+		{name: "space", input: "user name", expect: `"user name"`},
+		{name: "quote and slash", input: `p"a\ss`, expect: `"p\"a\\ss"`},
+		{name: "carriage return", input: "user\rname", wantErr: true},
+		{name: "line feed", input: "user\nname", wantErr: true},
+		{name: "null byte", input: "user\x00name", wantErr: true},
+		{name: "delete", input: "user\x7fname", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := quoteIMAPString(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("quoteIMAPString() error = nil, want non-nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("quoteIMAPString() error = %v", err)
+			}
+			if got != tc.expect {
+				t.Fatalf("quoteIMAPString() = %q, want %q", got, tc.expect)
+			}
+		})
+	}
+}
+
+func TestNewIMAPPooler_RejectsCredentialLineBreaks(t *testing.T) {
+	_, err := NewIMAPPooler(IMAPConfig{Host: "127.0.0.1", Port: 1, User: "user\rname", Password: "pass", UseTLS: false})
+	if err == nil {
+		t.Fatal("NewIMAPPooler() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "contains ASCII control character") {
+		t.Fatalf("err = %q, want control-character validation", err.Error())
 	}
 }
 

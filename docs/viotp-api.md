@@ -17,7 +17,7 @@
 
 ### 0.1 Ví dụ gửi đi
 ```http
-GET https://api.viotp.com/users/balance?token=5abec70115c70ebb685169fe7dd985e7
+GET https://api.viotp.com/users/balance?token=<VIOTP_TOKEN>
 ```
 **Danh sách tham số gửi đi:**
 - `token` : API token của bạn. Dùng để định danh người gửi
@@ -51,7 +51,7 @@ GET https://api.viotp.com/users/balance?token=5abec70115c70ebb685169fe7dd985e7
 
 ### 1.1 Ví dụ gửi đi
 ```http
-GET https://api.viotp.com/networks/get?token=5abec70115c70ebb685169fe7dd985e7
+GET https://api.viotp.com/networks/get?token=<VIOTP_TOKEN>
 ```
 **Danh sách tham số gửi đi:**
 - `token` : API token của bạn
@@ -91,7 +91,7 @@ GET https://api.viotp.com/networks/get?token=5abec70115c70ebb685169fe7dd985e7
 
 ### 2.1 Ví dụ gửi đi
 ```http
-GET https://api.viotp.com/service/getv2?token=5abec70115c70ebb685169fe7dd985e7&country=vn
+GET https://api.viotp.com/service/getv2?token=<VIOTP_TOKEN>&country=vn
 ```
 **Danh sách tham số gửi đi:**
 - `token` : API token của bạn
@@ -128,37 +128,37 @@ GET https://api.viotp.com/service/getv2?token=5abec70115c70ebb685169fe7dd985e7&c
 **THUÊ SIM VIỆT NAM**
 - Cơ bản:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1
 ```
 - Tùy chọn nhà mạng:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&network=MOBIFONE|VINAPHONE|VIETTEL|VIETNAMOBILE|ITELECOM|WINTEL
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&network=MOBIFONE|VINAPHONE|VIETTEL|VIETNAMOBILE|ITELECOM|WINTEL
 ```
 - Tùy chọn đầu số muốn lấy:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&prefix=90|91|92|93
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&prefix=90|91|92|93
 ```
 - Tùy chọn đầu số không muốn lấy:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&exceptPrefix=94|96|97|98
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&exceptPrefix=94|96|97|98
 ```
 - Tùy chọn thuê lại số cũ:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&number=0987654321
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&number=0987654321
 ```
 
 **THUÊ SIM LÀO**
 - Cơ bản:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&country=la
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&country=la
 ```
 - Tùy chọn nhà mạng:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&country=la&network=UNITEL|ETL|BEELINE|LAOTEL
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&country=la&network=UNITEL|ETL|BEELINE|LAOTEL
 ```
 - Tùy chọn thuê lại số cũ:
 ```http
-GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&serviceId=1&number=8562098765432
+GET https://api.viotp.com/request/getv2?token=<VIOTP_TOKEN>&serviceId=1&number=8562098765432
 ```
 
 **Danh sách tham số gửi đi:**
@@ -208,7 +208,7 @@ GET https://api.viotp.com/request/getv2?token=5abec70115c70ebb685169fe7dd985e7&s
 
 ### 4.1 Ví dụ gửi đi
 ```http
-GET https://api.viotp.com/session/getv2?requestId=1234122&token=5abec70115c70ebb685169fe7dd985e7
+GET https://api.viotp.com/session/getv2?requestId=1234122&token=<VIOTP_TOKEN>
 ```
 **Danh sách tham số gửi đi:**
 - `token` : API token của bạn
@@ -277,7 +277,7 @@ GET https://api.viotp.com/session/getv2?requestId=1234122&token=5abec70115c70ebb
 
 ### 5.1 Ví dụ gửi đi
 ```http
-GET https://api.viotp.com/session/historyv2?token=5abec70115c70ebb685169fe7dd985e7&service=1&status=2&limit=100&fromDate=2020-11-12&toDate=2020-11-12
+GET https://api.viotp.com/session/historyv2?token=<VIOTP_TOKEN>&service=1&status=2&limit=100&fromDate=2020-11-12&toDate=2020-11-12
 ```
 **Danh sách tham số gửi đi:**
 - `token` : API token của bạn

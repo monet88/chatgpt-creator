@@ -218,6 +218,48 @@ func TestCommand_CodexConfigFailsClosed(t *testing.T) {
 	}
 }
 
+func TestCommand_CodexOutputFlagFailsClosed(t *testing.T) {
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex-output", "unused.json"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_CodexOutputConfigFailsClosed(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	content := []byte(`{"codex_output":"unused.json"}`)
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
+func TestCommand_CodexOutputEnvFailsClosed(t *testing.T) {
+	before := os.Getenv("CODEX_OUTPUT")
+	t.Cleanup(func() { _ = os.Setenv("CODEX_OUTPUT", before) })
+	if err := os.Setenv("CODEX_OUTPUT", "unused.json"); err != nil {
+		t.Fatalf("Setenv() error = %v", err)
+	}
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1"}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
+		t.Fatalf("stderr = %q", stderr)
+	}
+}
+
 func TestCommand_ViOTPFlagFailsClosed(t *testing.T) {
 	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--viotp-token", "token"}, "")
 	if exitCode != exitCodeValidation {
@@ -252,7 +294,6 @@ func TestCommand_ActionableFlagsSkipInteractiveFallback(t *testing.T) {
 		{name: "proxy cooldown", args: []string{"--proxy-cooldown", "10"}},
 		{name: "imap port", args: []string{"--imap-port", "993"}},
 		{name: "imap user", args: []string{"--imap-user", "user@example.com"}},
-		{name: "codex output", args: []string{"--codex-output", "unused.json"}},
 	}
 
 	for _, tc := range testCases {

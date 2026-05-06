@@ -33,6 +33,7 @@ const (
 	DefaultConfigFilename = "config.json"
 	DefaultPassword       = "" // Min 12 characters
 	DefaultDomainValue    = ""
+	DefaultCodexOutput    = "codex-tokens.json"
 )
 
 // DefaultConfigPath returns the default path to the config file.
@@ -49,7 +50,7 @@ func Load(path string) (*Config, error) {
 		DefaultDomain:   DefaultDomainValue,
 		IMAPPort:        993,
 		IMAPUseTLS:      true,
-		CodexOutput:     "codex-tokens.json",
+		CodexOutput:     DefaultCodexOutput,
 	}
 
 	// Try to read the file
