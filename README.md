@@ -1,22 +1,41 @@
-# ChatGPT Account Registration Bot
+# ChatGPT Creator (Go)
 
-Automated bulk ChatGPT account registration bot built with Go. Features concurrent workers, TLS fingerprint spoofing, automatic email generation, OTP verification, and retry-until-success logic.
+CLI tool for batch ChatGPT account registration with concurrent workers, TLS client profile spoofing, temporary email OTP handling, and Sentinel token generation.
 
-## Features
+## Scope and Status
 
-- **Concurrent Registration** — Configurable worker pool for parallel account creation
-- **TLS Fingerprinting** — Randomized Chrome TLS profiles to avoid detection
-- **Auto Email Generation** — Generates temporary emails via [generator.email](https://generator.email) or custom domains
-- **OTP Verification** — Automatic email OTP retrieval and validation
-- **Retry Loop** — Automatically retries failed registrations until target count is reached
-- **Proxy Support** — Optional HTTP/SOCKS proxy for all requests
-- **Configurable** — JSON config file with interactive prompt overrides
+- Language: Go
+- Entry point: `cmd/register/main.go`
+- Current mode: interactive CLI (prompt-driven)
+- Output: `email|password` lines to configured output file
 
-## Requirements
+## Current Features (Verified)
 
-- Go 1.21+
+- Interactive prompts for proxy, total accounts, workers, default password, and default domain.
+- Config loading from `config.json` via `internal/config.Load`.
+- `PROXY` environment variable override.
+- Concurrent worker pool with retry-until-success semantics in `internal/register.RunBatch`.
+- Registration flow in `internal/register/flow.go`:
+  - visit homepage
+  - fetch CSRF token
+  - sign in bootstrap
+  - authorize redirect
+  - register
+  - send OTP
+  - validate OTP
+  - create account
+  - callback
+- Temporary email generation and OTP polling from `generator.email` in `internal/email`.
+- Domain blacklist persistence to `blacklist.json` when encountering `unsupported_email` errors.
+- Sentinel challenge + proof-of-work token generation in `internal/sentinel`.
 
-## Installation
+## Quick Start
+
+### Requirements
+
+- Go 1.25.x (repo `go.mod` currently declares `go 1.25.5`)
+
+### Install
 
 ```bash
 git clone https://github.com/verssache/chatgpt-creator.git
@@ -24,49 +43,15 @@ cd chatgpt-creator
 go mod download
 ```
 
-## Usage
+### Run
 
 ```bash
 go run cmd/register/main.go
 ```
 
-### Interactive Prompts
-
-```
-Proxy (enter to skip):
-Total accounts to register: 5
-Max concurrent workers (default: 3): 2
-Default password (current: (random), press Enter to use, or enter new):
-Default domain (current: (random from generator.email), press Enter to use, or enter new):
-```
-
-### Example Output
-
-```
-[22:43:08] [W1] [1/5] Starting registration flow...
-[22:43:09] [W1] [1/5] Visit Homepage (Try 1) | 200
-[22:43:09] [W1] [1/5] Get CSRF | 200
-[22:43:10] [W1] [1/5] Signin | 200
-[22:43:12] [W1] [1/5] Authorize | 200
-[22:43:15] [W1] [1/5] Register | 200
-[22:43:17] [W1] [1/5] Send OTP | 200
-[22:43:19] [W1] [1/5] Validate OTP [483291] | 200
-[22:43:24] [W1] [1/5] Create Account | 200
-[22:43:33] [W1] [1/5] Callback | 200
-[22:43:33] [W1] SUCCESS: johndoe8x2kq@smartmail.de
-
---- Batch Registration Summary ---
-Target:    5
-Success:   5
-Attempts:  6
-Failures:  1
-Elapsed:   1m 45s
-----------------------------------
-```
-
 ## Configuration
 
-Create a `config.json` in the project root (optional):
+Create `config.json` at repository root:
 
 ```json
 {
@@ -77,55 +62,49 @@ Create a `config.json` in the project root (optional):
 }
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `proxy` | string | `""` | HTTP/SOCKS proxy URL. Leave empty for direct connection |
-| `output_file` | string | `results.txt` | File path for saving registered accounts |
-| `default_password` | string | `""` | Password for all accounts. Must be 12+ chars. Empty = random |
-| `default_domain` | string | `""` | Email domain to use. Empty = random from generator.email |
+| Key | Type | Behavior |
+|---|---|---|
+| `proxy` | string | Optional proxy URL passed into TLS client (`WithProxyUrl`) |
+| `output_file` | string | File where successful accounts are appended |
+| `default_password` | string | If empty, password is generated (`GeneratePassword(14)`); if set, must be >= 12 chars |
+| `default_domain` | string | If empty, domain is selected via `generator.email`; if set, email uses that domain |
 
-Environment variable `PROXY` overrides the config file proxy value.
+Environment override:
+
+- `PROXY`: overrides `config.proxy`
 
 ## Output Format
 
-Registered accounts are saved to the output file in the format:
+Each success is appended to `output_file` as:
 
-```
+```text
 email|password
 ```
 
 ## Project Structure
 
-```
-.
-├── cmd/
-│   └── register/
-│       └── main.go          # Entry point, interactive prompts
-├── internal/
-│   ├── config/
-│   │   └── config.go        # Configuration loading & validation
-│   ├── register/
-│   │   ├── batch.go         # Batch orchestration, worker pool, retry logic
-│   │   ├── client.go        # HTTP client with TLS fingerprinting
-│   │   └── flow.go          # Registration flow (CSRF → signup → OTP → callback)
-│   ├── email/
-│   │   └── generator.go     # Temporary email generation
-│   ├── chrome/
-│   │   └── profiles.go      # Chrome TLS profile randomization
-│   └── util/
-│       ├── helpers.go       # Utility functions
-│       ├── names.go         # Random name generation (gofakeit)
-│       ├── password.go      # Random password generation
-│       └── trace.go         # Datadog trace headers
-├── config.json               # Configuration file
-├── go.mod
-└── go.sum
+```text
+cmd/register/main.go          CLI entry and prompts
+internal/config/config.go     Config defaults, load, env override
+internal/register/batch.go    Worker pool, retries, output writing
+internal/register/client.go   TLS-backed client/session setup
+internal/register/flow.go     End-to-end registration state flow
+internal/email/generator.go   Temp email + OTP polling + blacklist persistence
+internal/sentinel/*.go        Sentinel challenge + PoW token builder
+internal/chrome/profiles.go   Browser profile mapping to tls-client profiles
+internal/util/*.go            Password/name/UUID/trace helpers
 ```
 
-## Disclaimer
+## Known Constraints / Unknowns
 
-This tool is provided for educational and research purposes only. Use of this tool to create accounts in violation of OpenAI's Terms of Service is solely at your own risk. The author assumes no responsibility for any misuse or consequences arising from the use of this software.
+- This repo does not include automated tests at the moment (not found in current tree).
+- External endpoints (`chatgpt.com`, `auth.openai.com`, `sentinel.openai.com`, `generator.email`) can change behavior at any time.
+- `release-manifest.json` is large and not required for the runtime flow described above.
+
+## Legal and Usage Notice
+
+This repository automates account-related flows against third-party services. You are responsible for complying with all applicable terms of service, laws, and policies.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT. See `LICENSE`.
