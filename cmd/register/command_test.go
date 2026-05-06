@@ -50,8 +50,8 @@ func executeCommandForTest(t *testing.T, args []string, stdin string) (int, stri
 func TestCommand_NonInteractiveParsing(t *testing.T) {
 	var called bool
 	var captured batchCall
-	prevRunBatchForCLI := runBatchForCLI
-	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string) register.BatchResult {
+	prevRunBatch := runBatchWithProviders
+	runBatchWithProviders = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
 		called = true
 		captured = batchCall{
 			total:           totalAccounts,
@@ -63,7 +63,7 @@ func TestCommand_NonInteractiveParsing(t *testing.T) {
 		}
 		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), Failures: 0, StopReason: register.StopReasonTargetReached}
 	}
-	t.Cleanup(func() { runBatchForCLI = prevRunBatchForCLI })
+	t.Cleanup(func() { runBatchWithProviders = prevRunBatch })
 
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	content := []byte(`{"proxy":"http://config:8080","output_file":"config-out.txt","default_password":"longpassword12","default_domain":"config.example"}`)
@@ -103,7 +103,7 @@ func TestCommand_NonInteractiveParsing(t *testing.T) {
 	if captured.defaultDomain != "flag.example" {
 		t.Fatalf("defaultDomain = %q", captured.defaultDomain)
 	}
-	if !strings.Contains(stdout, "\"target\":10") {
+	if !strings.Contains(stdout, `"target":10`) {
 		t.Fatalf("stdout = %q, want json with target", stdout)
 	}
 	if stderr != "" {
@@ -142,12 +142,12 @@ func TestCommand_FlagOverridesEnvProxy(t *testing.T) {
 	}
 
 	var capturedProxy string
-	prevRunBatchForCLI := runBatchForCLI
-	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string) register.BatchResult {
+	prevRunBatch := runBatchWithProviders
+	runBatchWithProviders = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
 		capturedProxy = proxy
 		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
 	}
-	t.Cleanup(func() { runBatchForCLI = prevRunBatchForCLI })
+	t.Cleanup(func() { runBatchWithProviders = prevRunBatch })
 
 	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--proxy", "http://flag:8080"}, "")
 	if exitCode != 0 {
@@ -161,14 +161,15 @@ func TestCommand_FlagOverridesEnvProxy(t *testing.T) {
 func TestCommand_InteractiveFallbackUsesStdin(t *testing.T) {
 	var called bool
 	prevRunBatchForCLI := runBatchForCLI
-	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string) register.BatchResult {
+	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts register.BatchOptions) register.BatchResult {
 		called = true
 		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
 	}
 	t.Cleanup(func() { runBatchForCLI = prevRunBatchForCLI })
 
 	configPath := filepath.Join(t.TempDir(), "missing.json")
-	input := strings.Join([]string{"", "1", "", "supersecurepass", ""}, "\n") + "\n"
+	// Stdin: proxy, total, workers, password, domain, pacing
+	input := strings.Join([]string{"", "1", "", "supersecurepass", "", ""}, "\n") + "\n"
 	exitCode, stdout, stderr := executeCommandForTest(t, []string{"--config", configPath}, input)
 
 	if exitCode != 0 {

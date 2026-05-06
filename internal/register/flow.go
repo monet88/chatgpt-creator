@@ -11,7 +11,6 @@ import (
 	"time"
 
 	http "github.com/bogdanfinn/fhttp"
-	"github.com/verssache/chatgpt-creator/internal/email"
 	"github.com/verssache/chatgpt-creator/internal/sentinel"
 	"github.com/verssache/chatgpt-creator/internal/util"
 )
@@ -379,7 +378,7 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 	}
 
 	if needOTP {
-		otpCode, otpErr := email.GetVerificationCodeWithContext(ctx, emailAddr, 20, 3*time.Second)
+		otpCode, otpErr := c.otpProvider.GetOTP(ctx, emailAddr, defaultOTPTimeout)
 		if otpErr != nil {
 			return NewFailure(FailureOTPTimeout, "get_otp", 0, otpErr)
 		}
@@ -398,7 +397,7 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 			if err := c.randomDelayWithContext(ctx, 1.0, 2.0); err != nil {
 				return WrapFailure("retry_otp_delay", 0, err)
 			}
-			otpCode, otpErr = email.GetVerificationCodeWithContext(ctx, emailAddr, 10, 3*time.Second)
+			otpCode, otpErr = c.otpProvider.GetOTP(ctx, emailAddr, 30*time.Second)
 			if otpErr != nil {
 				return NewFailure(FailureOTPTimeout, "retry_get_otp", status, otpErr)
 			}

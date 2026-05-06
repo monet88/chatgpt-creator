@@ -27,13 +27,15 @@ func newCountedDeps(calls *int64, runErr error) batchDependencies {
 		newClient: func(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (flowRunner, error) {
 			return countedRunner{calls: calls, err: runErr}, nil
 		},
-		createTempEmail: func(defaultDomain string) (string, error) {
-			return "alice@example.com", nil
-		},
+		createTempEmail:  func(defaultDomain string) (string, error) { return "alice@example.com", nil },
 		generatePassword: func() string { return "generated-password" },
 		randomName:       func() (string, string) { return "Alice", "Doe" },
 		randomBirthdate:  func() string { return "1990-01-01" },
 		writeCredential:  func(outputFile, emailAddr, password string) error { return nil },
+		resolveProxy: func(ctx context.Context, fallback string) (string, error) {
+			return fallback, nil
+		},
+		reportProxy: func(proxyURL string, success bool) {},
 	}
 }
 

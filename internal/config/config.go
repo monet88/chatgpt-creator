@@ -2,16 +2,29 @@ package config
 
 import (
 	"encoding/json"
-	"os"
 	"fmt"
+	"os"
+	"strconv"
 )
 
 // Config holds the application configuration.
 type Config struct {
 	Proxy           string `json:"proxy"`
+	ProxyList       string `json:"proxy_list"`
+	ProxyCooldown   int    `json:"proxy_cooldown"`
 	OutputFile      string `json:"output_file"`
 	DefaultPassword string `json:"default_password"`
 	DefaultDomain   string `json:"default_domain"`
+	Pacing          string `json:"pacing"`
+	ViOTPToken      string `json:"viotp_token"`
+	ViOTPServiceID  int    `json:"viotp_service_id"`
+	IMAPHost        string `json:"imap_host"`
+	IMAPPort        int    `json:"imap_port"`
+	IMAPUser        string `json:"imap_user"`
+	IMAPPassword    string `json:"imap_password"`
+	IMAPUseTLS      bool   `json:"imap_use_tls"`
+	CodexEnabled    bool   `json:"codex_enabled"`
+	CodexOutput     string `json:"codex_output"`
 }
 
 const (
@@ -34,6 +47,9 @@ func Load(path string) (*Config, error) {
 		OutputFile:      DefaultOutputFile,
 		DefaultPassword: DefaultPassword,
 		DefaultDomain:   DefaultDomainValue,
+		IMAPPort:        993,
+		IMAPUseTLS:      true,
+		CodexOutput:     "codex-tokens.json",
 	}
 
 	// Try to read the file
@@ -54,6 +70,43 @@ func Load(path string) (*Config, error) {
 	if proxy := os.Getenv("PROXY"); proxy != "" {
 		cfg.Proxy = proxy
 	}
+	if proxyList := os.Getenv("PROXY_LIST"); proxyList != "" {
+		cfg.ProxyList = proxyList
+	}
+	if pacing := os.Getenv("PACING"); pacing != "" {
+		cfg.Pacing = pacing
+	}
+	if viOTPToken := os.Getenv("VIOTP_TOKEN"); viOTPToken != "" {
+		cfg.ViOTPToken = viOTPToken
+	}
+	if v := os.Getenv("VIOTP_SERVICE_ID"); v != "" {
+		if id, err := strconv.Atoi(v); err == nil {
+			cfg.ViOTPServiceID = id
+		}
+	}
+	if v := os.Getenv("IMAP_HOST"); v != "" {
+		cfg.IMAPHost = v
+	}
+	if v := os.Getenv("IMAP_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.IMAPPort = port
+		}
+	}
+	if v := os.Getenv("IMAP_USER"); v != "" {
+		cfg.IMAPUser = v
+	}
+	if v := os.Getenv("IMAP_PASSWORD"); v != "" {
+		cfg.IMAPPassword = v
+	}
+	if v := os.Getenv("IMAP_TLS"); v != "" {
+		cfg.IMAPUseTLS = v != "false" && v != "0"
+	}
+	if v := os.Getenv("PROXY_COOLDOWN"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil {
+			cfg.ProxyCooldown = sec
+		}
+	}
 
 	return cfg, nil
 }
+

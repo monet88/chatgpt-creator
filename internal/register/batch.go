@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/verssache/chatgpt-creator/internal/email"
+	"github.com/verssache/chatgpt-creator/internal/phone"
 )
 
 type BatchOptions struct {
@@ -16,6 +17,7 @@ type BatchOptions struct {
 	MaxConsecutiveFailures int
 	PerAccountTimeout      time.Duration
 	RetryBaseDelay         time.Duration
+	PacingProfile          PacingProfile
 }
 
 func defaultBatchOptions(totalAccounts int) BatchOptions {
@@ -28,13 +30,25 @@ func defaultBatchOptions(totalAccounts int) BatchOptions {
 		MaxConsecutiveFailures: totalAccounts,
 		PerAccountTimeout:      90 * time.Second,
 		RetryBaseDelay:         500 * time.Millisecond,
+		PacingProfile:          PacingHuman,
 	}
+}
+
+// DefaultBatchOptionsForCLI returns default batch options for CLI usage.
+func DefaultBatchOptionsForCLI(totalAccounts int) BatchOptions {
+	return defaultBatchOptions(totalAccounts)
 }
 
 // registerOne handles a single account registration.
 func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFile, defaultPassword, defaultDomain string, printMu, fileMu *sync.Mutex, deps batchDependencies) (bool, string, error) {
-	client, err := deps.newClient(proxy, tag, workerID, printMu, fileMu)
+	resolvedProxy, err := deps.resolveProxy(ctx, proxy)
 	if err != nil {
+		return false, "", WrapFailure("resolve_proxy", 0, err)
+	}
+
+	client, err := newClientWithDeps(deps, resolvedProxy, tag, workerID, printMu, fileMu)
+	if err != nil {
+		deps.reportProxy(resolvedProxy, false)
 		return false, "", WrapFailure("new_client", 0, err)
 	}
 
@@ -53,8 +67,11 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 
 	err = client.RunRegisterWithContext(ctx, emailAddr, password, firstName+" "+lastName, birthdate)
 	if err != nil {
+		deps.reportProxy(resolvedProxy, false)
 		return false, emailAddr, WrapFailure("run_register", 0, err)
 	}
+
+	deps.reportProxy(resolvedProxy, true)
 
 	fileMu.Lock()
 	err = deps.writeCredential(outputFile, emailAddr, password)
@@ -66,7 +83,7 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 	return true, emailAddr, nil
 }
 
-func RunBatchForCLI(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string) BatchResult {
+func RunBatchForCLI(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts BatchOptions) BatchResult {
 	return RunBatchWithOptions(
 		ctx,
 		totalAccounts,
@@ -76,13 +93,72 @@ func RunBatchForCLI(ctx context.Context, totalAccounts int, outputFile string, m
 		defaultPassword,
 		defaultDomain,
 		defaultBatchDependencies(),
-		defaultBatchOptions(totalAccounts),
+		opts,
+	)
+}
+
+// ProviderOptions holds optional provider overrides for batch registration.
+// Zero values use defaults (generator.email OTP, no phone, no proxy pool, no codex).
+type ProviderOptions struct {
+	// ProxyPool overrides the single proxy with a rotating pool.
+	// When set, resolveProxy delegates to pool.Next and reportProxy delegates to pool.Report.
+	ProxyPool interface {
+		Next(ctx context.Context) (string, error)
+		Report(proxyURL string, success bool)
+	}
+	// OTPProvider overrides the default generator.email OTP retrieval.
+	OTPProvider email.OTPProvider
+	// PhoneProvider enables SMS-based phone verification.
+	PhoneProvider phone.PhoneProvider
+	// ViOTPServiceID is the ViOTP service ID for OpenAI.
+	ViOTPServiceID int
+	// CodexExtractor enables post-registration Codex token extraction.
+	CodexExtractor codexExtractor
+	// CodexOutputFile is the path for extracted Codex tokens.
+	CodexOutputFile string
+}
+
+// RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
+func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts BatchOptions, providers ProviderOptions) BatchResult {
+	deps := defaultBatchDependencies()
+
+	if providers.OTPProvider != nil {
+		deps.otpProvider = providers.OTPProvider
+	}
+	if providers.PhoneProvider != nil {
+		deps.phoneProvider = providers.PhoneProvider
+		deps.viOTPServiceID = providers.ViOTPServiceID
+	}
+	if providers.CodexExtractor != nil {
+		deps.codexExtractor = providers.CodexExtractor
+		deps.codexOutputFile = providers.CodexOutputFile
+	}
+	if providers.ProxyPool != nil {
+		pool := providers.ProxyPool
+		deps.resolveProxy = func(ctx context.Context, fallback string) (string, error) {
+			return pool.Next(ctx)
+		}
+		deps.reportProxy = func(proxyURL string, success bool) {
+			pool.Report(proxyURL, success)
+		}
+	}
+
+	return RunBatchWithOptions(
+		ctx,
+		totalAccounts,
+		outputFile,
+		maxWorkers,
+		proxy,
+		defaultPassword,
+		defaultDomain,
+		deps,
+		opts,
 	)
 }
 
 // RunBatch runs concurrent registration tasks with retry until target success count is reached.
 func RunBatch(totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string) {
-	RunBatchForCLI(context.Background(), totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain)
+	RunBatchForCLI(context.Background(), totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain, defaultBatchOptions(totalAccounts))
 }
 
 func RunBatchWithDependencies(totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, deps batchDependencies) {
@@ -174,6 +250,14 @@ func RunBatchWithOptions(ctx context.Context, totalAccounts int, outputFile stri
 					printMu.Lock()
 					diagnosticPrintf("[%s] [W%d] ✓ SUCCESS: %s\n", ts, workerID, safeLogMessage(emailAddr))
 					printMu.Unlock()
+
+					// Pacing delay between registrations
+					if delay := pacingDelay(options.PacingProfile); delay > 0 {
+						if err := waitWithContext(ctx, delay); err != nil {
+							setStop(StopReasonContextCancelled)
+							return
+						}
+					}
 					continue
 				}
 
@@ -212,6 +296,16 @@ func RunBatchWithOptions(ctx context.Context, totalAccounts int, outputFile stri
 				}
 
 				atomic.AddInt64(&remaining, 1)
+
+				// Pacing delay between registrations (even on failure)
+				if pDelay := pacingDelay(options.PacingProfile); pDelay > 0 {
+					if err := waitWithContext(ctx, pDelay); err != nil {
+						setStop(StopReasonContextCancelled)
+						return
+					}
+				}
+
+				// Backoff delay on failure (stacks with pacing)
 				delay := backoffDelay(options.RetryBaseDelay, int(currentConsecutive))
 				if err := waitWithContext(ctx, delay); err != nil {
 					setStop(StopReasonContextCancelled)

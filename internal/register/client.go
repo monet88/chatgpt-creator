@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/verssache/chatgpt-creator/internal/chrome"
+	"github.com/verssache/chatgpt-creator/internal/email"
+	"github.com/verssache/chatgpt-creator/internal/phone"
 )
 
 const (
@@ -19,18 +21,21 @@ const (
 )
 
 type Client struct {
-	session     tls_client.HttpClient
-	proxy       string
-	tag         string
-	workerID    int
-	deviceID    string
-	impersonate string
-	major       int
-	fullVersion string
-	ua          string
-	secChUA     string
-	printMu     *sync.Mutex
-	fileMu      *sync.Mutex
+	session        tls_client.HttpClient
+	proxy          string
+	tag            string
+	workerID       int
+	deviceID       string
+	impersonate    string
+	major          int
+	fullVersion    string
+	ua             string
+	secChUA        string
+	printMu        *sync.Mutex
+	fileMu         *sync.Mutex
+	otpProvider    email.OTPProvider
+	phoneProvider  phone.PhoneProvider
+	viOTPServiceID int
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {

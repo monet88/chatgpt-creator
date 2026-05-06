@@ -9,15 +9,19 @@ import (
 type FailureKind string
 
 const (
-	FailureUnsupportedEmail FailureKind = "unsupported_email"
-	FailureOTPTimeout       FailureKind = "otp_timeout"
-	FailureChallengeFailed  FailureKind = "challenge_failed"
-	FailureRateLimited      FailureKind = "rate_limited"
-	FailureUpstreamChanged  FailureKind = "upstream_changed"
-	FailureNetwork          FailureKind = "network"
-	FailureValidation       FailureKind = "validation"
-	FailureOutputWrite      FailureKind = "output_write"
-	FailureUnknown          FailureKind = "unknown"
+	FailureUnsupportedEmail    FailureKind = "unsupported_email"
+	FailureOTPTimeout          FailureKind = "otp_timeout"
+	FailureChallengeFailed     FailureKind = "challenge_failed"
+	FailureRateLimited         FailureKind = "rate_limited"
+	FailureUpstreamChanged     FailureKind = "upstream_changed"
+	FailureNetwork             FailureKind = "network"
+	FailureValidation          FailureKind = "validation"
+	FailureOutputWrite         FailureKind = "output_write"
+	FailurePhoneChallenge      FailureKind = "phone_challenge"
+	FailurePhoneRentFailed     FailureKind = "phone_rent_failed"
+	FailurePhoneOTPTimeout     FailureKind = "phone_otp_timeout"
+	FailureInsufficientBalance FailureKind = "insufficient_balance"
+	FailureUnknown             FailureKind = "unknown"
 )
 
 type FailureError struct {

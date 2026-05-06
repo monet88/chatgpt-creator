@@ -37,6 +37,10 @@ func baseDeps(t *testing.T, runnerErr error, writeFn func(outputFile, emailAddr,
 			return "1999-01-01"
 		},
 		writeCredential: writeFn,
+		resolveProxy: func(ctx context.Context, fallback string) (string, error) {
+			return fallback, nil
+		},
+		reportProxy: func(proxyURL string, success bool) {},
 	}
 }
 

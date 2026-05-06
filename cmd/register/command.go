@@ -10,9 +10,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/verssache/chatgpt-creator/internal/codex"
 	"github.com/verssache/chatgpt-creator/internal/config"
+	"github.com/verssache/chatgpt-creator/internal/email"
+	"github.com/verssache/chatgpt-creator/internal/phone"
+	proxypool "github.com/verssache/chatgpt-creator/internal/proxy"
 	"github.com/verssache/chatgpt-creator/internal/register"
 )
 
@@ -23,6 +28,7 @@ const (
 )
 
 var runBatchForCLI = register.RunBatchForCLI
+var runBatchWithProviders = register.RunBatchForCLIWithProviders
 var withDiagnosticWriter = register.WithDiagnosticWriter
 
 type exitError struct {
@@ -50,15 +56,30 @@ func executeWithIO(in io.Reader, out, errOut io.Writer) int {
 
 func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	var (
-		configPath   string
-		total        int
-		workers      int
-		proxy        string
-		outputFile   string
-		password     string
-		domain       string
-		jsonMode     bool
-		interactive  bool
+		configPath    string
+		total         int
+		workers       int
+		proxy         string
+		proxyList     string
+		proxyCooldown int
+		outputFile    string
+		password      string
+		domain        string
+		pacing        string
+		jsonMode      bool
+		interactive   bool
+		// ViOTP flags
+		viOTPToken     string
+		viOTPServiceID int
+		// IMAP flags
+		imapHost     string
+		imapPort     int
+		imapUser     string
+		imapPassword string
+		imapTLS      bool
+		// Codex flags
+		codexEnabled bool
+		codexOutput  string
 	)
 
 	cmd := &cobra.Command{
@@ -77,6 +98,101 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				effectiveProxy = proxy
 			}
 
+			effectiveProxyList := cfg.ProxyList
+			if cmd.Flags().Changed("proxy-list") {
+				effectiveProxyList = proxyList
+			}
+
+			if effectiveProxy != "" && effectiveProxyList != "" {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --proxy and --proxy-list are mutually exclusive")}
+			}
+
+			// Initialize proxy pool if --proxy-list is set
+			var proxyPool *proxypool.RoundRobinPool
+			if effectiveProxyList != "" {
+				proxies, loadErr := proxypool.LoadProxies(effectiveProxyList)
+				if loadErr != nil {
+					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: %w", loadErr)}
+				}
+				cooldownSec := proxyCooldown
+				if cfg.ProxyCooldown > 0 && cooldownSec == 300 {
+					cooldownSec = cfg.ProxyCooldown
+				}
+				pool, poolErr := proxypool.NewRoundRobinPool(proxies, time.Duration(cooldownSec)*time.Second)
+				if poolErr != nil {
+					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: %w", poolErr)}
+				}
+				proxyPool = pool
+			} else if effectiveProxy != "" {
+				proxyPool = proxypool.NewSinglePool(effectiveProxy)
+			}
+
+			// Build IMAP OTP provider if configured
+			effectiveIMAPHost := cfg.IMAPHost
+			if cmd.Flags().Changed("imap-host") {
+				effectiveIMAPHost = imapHost
+			}
+			effectiveIMAPUser := cfg.IMAPUser
+			if cmd.Flags().Changed("imap-user") {
+				effectiveIMAPUser = imapUser
+			}
+			effectiveIMAPPassword := cfg.IMAPPassword
+			if cmd.Flags().Changed("imap-password") {
+				effectiveIMAPPassword = imapPassword
+			}
+			effectiveIMAPPort := cfg.IMAPPort
+			if cmd.Flags().Changed("imap-port") {
+				effectiveIMAPPort = imapPort
+			}
+			effectiveIMAPTLS := cfg.IMAPUseTLS
+			if cmd.Flags().Changed("imap-tls") {
+				effectiveIMAPTLS = imapTLS
+			}
+
+			var otpProvider email.OTPProvider
+			if effectiveIMAPHost != "" && effectiveIMAPUser != "" && effectiveIMAPPassword != "" {
+				pooler, imapErr := email.NewIMAPPooler(email.IMAPConfig{
+					Host:     effectiveIMAPHost,
+					Port:     effectiveIMAPPort,
+					User:     effectiveIMAPUser,
+					Password: effectiveIMAPPassword,
+					UseTLS:   effectiveIMAPTLS,
+				})
+				if imapErr != nil {
+					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: IMAP connection failed: %w", imapErr)}
+				}
+				defer pooler.Close()
+				otpProvider = pooler
+			}
+
+			// Build ViOTP phone provider if token set
+			effectiveViOTPToken := cfg.ViOTPToken
+			if cmd.Flags().Changed("viotp-token") {
+				effectiveViOTPToken = viOTPToken
+			}
+			effectiveViOTPServiceID := cfg.ViOTPServiceID
+			if cmd.Flags().Changed("viotp-service-id") {
+				effectiveViOTPServiceID = viOTPServiceID
+			}
+			var phoneProvider phone.PhoneProvider
+			if effectiveViOTPToken != "" {
+				phoneProvider = phone.NewViOTPClient(effectiveViOTPToken)
+			}
+
+			// Build Codex extractor if enabled
+			effectiveCodexEnabled := cfg.CodexEnabled
+			if cmd.Flags().Changed("codex") {
+				effectiveCodexEnabled = codexEnabled
+			}
+			effectiveCodexOutput := cfg.CodexOutput
+			if cmd.Flags().Changed("codex-output") {
+				effectiveCodexOutput = codexOutput
+			}
+			var codexExtractor *codex.Extractor
+			if effectiveCodexEnabled {
+				codexExtractor = codex.NewExtractor(effectiveCodexOutput)
+			}
+
 			effectiveOutput := cfg.OutputFile
 			if cmd.Flags().Changed("output") {
 				effectiveOutput = outputFile
@@ -92,7 +208,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				effectiveDomain = domain
 			}
 
-			hasActionableFlags := cmd.Flags().Changed("total") || cmd.Flags().Changed("workers") || cmd.Flags().Changed("proxy") || cmd.Flags().Changed("output") || cmd.Flags().Changed("password") || cmd.Flags().Changed("domain") || cmd.Flags().Changed("json")
+			hasActionableFlags := cmd.Flags().Changed("total") || cmd.Flags().Changed("workers") || cmd.Flags().Changed("proxy") || cmd.Flags().Changed("proxy-list") || cmd.Flags().Changed("output") || cmd.Flags().Changed("password") || cmd.Flags().Changed("domain") || cmd.Flags().Changed("pacing") || cmd.Flags().Changed("json") || cmd.Flags().Changed("imap-host") || cmd.Flags().Changed("viotp-token") || cmd.Flags().Changed("codex")
 			if interactive || !hasActionableFlags {
 				return runInteractive(in, out, errOut, cfg, effectiveOutput)
 			}
@@ -110,10 +226,37 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --output must not be empty")}
 			}
 
+			effectivePacing := cfg.Pacing
+			if cmd.Flags().Changed("pacing") {
+				effectivePacing = pacing
+			}
+			if effectivePacing == "" {
+				effectivePacing = "human"
+			}
+			pacingProfile, pacingErr := register.ParsePacingProfile(effectivePacing)
+			if pacingErr != nil {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: %w", pacingErr)}
+			}
+
+			providers := register.ProviderOptions{
+				OTPProvider:     otpProvider,
+				PhoneProvider:   phoneProvider,
+				ViOTPServiceID:  effectiveViOTPServiceID,
+				CodexOutputFile: effectiveCodexOutput,
+			}
+			if proxyPool != nil {
+				providers.ProxyPool = proxyPool
+			}
+			if codexExtractor != nil {
+				providers.CodexExtractor = codexExtractor
+			}
+
 			if jsonMode {
 				var result register.BatchResult
 				withDiagnosticWriter(errOut, func() {
-					result = runBatchForCLI(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain)
+					opts := register.DefaultBatchOptionsForCLI(total)
+					opts.PacingProfile = pacingProfile
+					result = runBatchWithProviders(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 				})
 				if err := json.NewEncoder(out).Encode(result); err != nil {
 					return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to encode json result: %w", err)}
@@ -124,7 +267,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				return nil
 			}
 
-			result := runBatchForCLI(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain)
+			opts := register.DefaultBatchOptionsForCLI(total)
+			opts.PacingProfile = pacingProfile
+			result := runBatchWithProviders(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 			if result.Success < int64(result.Target) {
 				return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: target not reached (%d/%d), stop_reason=%s", result.Success, result.Target, result.StopReason)}
 			}
@@ -140,11 +285,26 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(&total, "total", 0, "Total accounts to register")
 	cmd.Flags().IntVar(&workers, "workers", 3, "Max concurrent workers")
 	cmd.Flags().StringVar(&proxy, "proxy", "", "Proxy URL")
+	cmd.Flags().StringVar(&proxyList, "proxy-list", "", "Path to proxy list file (one URL per line)")
+	cmd.Flags().IntVar(&proxyCooldown, "proxy-cooldown", 300, "Proxy cooldown in seconds after failure")
 	cmd.Flags().StringVar(&outputFile, "output", "", "Output file path")
 	cmd.Flags().StringVar(&password, "password", "", "Default password")
 	cmd.Flags().StringVar(&domain, "domain", "", "Default email domain")
+	cmd.Flags().StringVar(&pacing, "pacing", "human", "Pacing profile: none, fast, human, slow")
 	cmd.Flags().BoolVar(&jsonMode, "json", false, "Emit machine-readable summary")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Force interactive prompt mode")
+	// ViOTP flags
+	cmd.Flags().StringVar(&viOTPToken, "viotp-token", "", "ViOTP API token for SMS verification")
+	cmd.Flags().IntVar(&viOTPServiceID, "viotp-service-id", 0, "ViOTP service ID for OpenAI")
+	// IMAP flags
+	cmd.Flags().StringVar(&imapHost, "imap-host", "", "IMAP server hostname for catch-all email")
+	cmd.Flags().IntVar(&imapPort, "imap-port", 993, "IMAP server port")
+	cmd.Flags().StringVar(&imapUser, "imap-user", "", "IMAP username")
+	cmd.Flags().StringVar(&imapPassword, "imap-password", "", "IMAP password")
+	cmd.Flags().BoolVar(&imapTLS, "imap-tls", true, "Use TLS for IMAP connection")
+	// Codex flags
+	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
+	cmd.Flags().StringVar(&codexOutput, "codex-output", "codex-tokens.json", "Output file for Codex tokens")
 
 	return cmd
 }
@@ -210,6 +370,21 @@ func runInteractive(in io.Reader, out, errOut io.Writer, cfg *config.Config, out
 		}
 	}
 
+	pacingStr := cfg.Pacing
+	if pacingStr == "" {
+		pacingStr = "human"
+	}
+	fmt.Fprintf(out, "Pacing profile (current: %s, options: none/fast/human/slow): ", pacingStr)
+	pacingInput, _ := reader.ReadString('\n')
+	pacingInput = strings.TrimSpace(pacingInput)
+	if pacingInput != "" {
+		pacingStr = pacingInput
+	}
+	pacingProfile, pacingErr := register.ParsePacingProfile(pacingStr)
+	if pacingErr != nil {
+		return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: %w", pacingErr)}
+	}
+
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "-------------------------------------------")
 	fmt.Fprintln(out, "Configuration:")
@@ -222,11 +397,14 @@ func runInteractive(in io.Reader, out, errOut io.Writer, cfg *config.Config, out
 	} else {
 		fmt.Fprintln(out, "  Domain:         (random)")
 	}
+	fmt.Fprintf(out, "  Pacing:         %s\n", pacingProfile)
 	fmt.Fprintf(out, "  Output File:    %s\n", outputFile)
 	fmt.Fprintln(out, "-------------------------------------------")
 	fmt.Fprintln(out)
 
-	_ = runBatchForCLI(context.Background(), totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain)
+	opts := register.DefaultBatchOptionsForCLI(totalAccounts)
+	opts.PacingProfile = pacingProfile
+	_ = runBatchForCLI(context.Background(), totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain, opts)
 	return nil
 }
 
