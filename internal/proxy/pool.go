@@ -27,14 +27,16 @@ type ProxyStats struct {
 	Success   int64     `json:"success"`
 	Failures  int64     `json:"failures"`
 	CoolUntil time.Time `json:"cool_until,omitempty"`
+	Health    float64   `json:"health"`
 }
 
 type proxyEntry struct {
-	url      string
-	success  atomic.Int64
-	failures atomic.Int64
-	mu       sync.RWMutex
-	coolUtil time.Time
+	url              string
+	success          atomic.Int64
+	failures         atomic.Int64
+	consecutiveFails atomic.Int64
+	mu               sync.RWMutex
+	coolUtil         time.Time
 }
 
 func (e *proxyEntry) isCooling(now time.Time) bool {
@@ -56,11 +58,15 @@ func (e *proxyEntry) coolUntil() time.Time {
 }
 
 func (e *proxyEntry) stats() ProxyStats {
+	s := e.success.Load()
+	f := e.failures.Load()
+	health := float64(s) / float64(s+f+1)
 	return ProxyStats{
 		URL:       e.url,
-		Success:   e.success.Load(),
-		Failures:  e.failures.Load(),
+		Success:   s,
+		Failures:  f,
 		CoolUntil: e.coolUntil(),
+		Health:    health,
 	}
 }
 
@@ -129,9 +135,20 @@ func (p *RoundRobinPool) Report(proxyURL string, success bool) {
 		if e.url == proxyURL {
 			if success {
 				e.success.Add(1)
+				e.consecutiveFails.Store(0)
 			} else {
 				e.failures.Add(1)
-				e.setCooldown(time.Now().Add(p.cooldown))
+				cf := e.consecutiveFails.Add(1)
+				// Exponential backoff: base * 2^(cf-1), capped at 10 * base
+				factor := int64(1)
+				if cf > 1 {
+					factor = int64(1) << (cf - 1)
+				}
+				const maxFactor = 10
+				if factor > maxFactor {
+					factor = maxFactor
+				}
+				e.setCooldown(time.Now().Add(p.cooldown * time.Duration(factor)))
 			}
 			return
 		}

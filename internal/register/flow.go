@@ -36,7 +36,9 @@ func (c *Client) visitHomepage() error {
 			return nil
 		}
 		resp.Body.Close()
-		time.Sleep(1 * time.Second)
+		// Jittered exponential backoff to avoid fingerprint-based blocking
+		backoff := time.Duration(500+rand.Intn(1500)) * time.Millisecond
+		time.Sleep(backoff)
 	}
 	return fmt.Errorf("failed to visit homepage after 3 retries (status: %d)", resp.StatusCode)
 }

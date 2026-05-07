@@ -20,6 +20,7 @@ import (
 	"github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 
+	"github.com/monet88/chatgpt-creator/internal/chrome"
 	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
@@ -80,8 +81,9 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 		return email, nil
 	}
 
+	tlsProfile := randomTLSProfile()
 	options := []tls_client.HttpClientOption{
-		tls_client.WithClientProfile(profiles.Chrome_131),
+		tls_client.WithClientProfile(tlsProfile),
 	}
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
@@ -128,7 +130,21 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 
 	firstName := gofakeit.FirstName()
 	lastName := gofakeit.LastName()
-	email := strings.ToLower(firstName+lastName+util.RandStr(5)) + "@" + randomDomain
+	var localPart string
+	switch r.Intn(5) {
+	case 0:
+		localPart = strings.ToLower(firstName + lastName)
+	case 1:
+		localPart = strings.ToLower(firstName + "." + lastName)
+	case 2:
+		localPart = strings.ToLower(lastName + firstName)
+	case 3:
+		localPart = strings.ToLower(firstName)
+	case 4:
+		localPart = strings.ToLower(lastName)
+	}
+	localPart += util.RandStr(3 + r.Intn(4))
+	email := localPart + "@" + randomDomain
 
 	return email, nil
 }
@@ -159,6 +175,12 @@ func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
 	return otp, nil
 }
 
+// randomTLSProfile returns a random Chrome TLS profile for fingerprint diversity.
+func randomTLSProfile() profiles.ClientProfile {
+	profile, _, _ := chrome.RandomChromeVersion()
+	return chrome.MapToTLSProfile(profile.Impersonate)
+}
+
 // GetVerificationCode polls generator.email for the OTP using a custom cookie.
 func GetVerificationCode(email string, maxRetries int, delay time.Duration) (string, error) {
 	return GetVerificationCodeWithContext(context.Background(), email, maxRetries, delay)
@@ -181,7 +203,7 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 		}
 
 		options := []tls_client.HttpClientOption{
-			tls_client.WithClientProfile(profiles.Chrome_131),
+			tls_client.WithClientProfile(randomTLSProfile()),
 		}
 
 		client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)

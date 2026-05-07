@@ -70,7 +70,17 @@
 
 ---
 
-## 6. 📝 Ghi chú
+## 6. Risks / concerns
+
+- [ ] Coverage tổng hiện khoảng `46.2%`, dưới mục tiêu 80%.
+- [ ] `cmd/register/command.go` đã lớn; cân nhắc tách nhỏ khi chỉnh CLI tiếp theo.
+- [ ] IMAP parser hiện tối giản; kiểm tra thêm với Gmail thực tế và server trả literal/multiline response.
+- [ ] ViOTP/Codex flags vẫn hiện trong CLI nhưng safe mode chặn fail-closed; cân nhắc làm UX rõ hơn.
+- [ ] Interactive mode chưa fail exit code khi batch không đạt target; non-interactive đã xử lý.
+
+---
+
+## 7. 📝 Ghi chú
 
 - **Pacing `human`** (120–300s giữa các lần): dùng cho production, IP tĩnh
 - **Pacing `fast`** (5–15s): dùng khi có rotating residential proxy

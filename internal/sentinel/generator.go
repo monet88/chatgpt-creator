@@ -49,20 +49,42 @@ func (g *SentinelTokenGenerator) getConfig() []any {
 	navProp := navProps[rand.Intn(len(navProps))]
 	navVal := fmt.Sprintf("%s-undefined", navProp)
 
-	screenRes := "1920x1080"
+	// Multiple common screen resolutions for fingerprint diversity
+	screenResolutions := []string{
+		"1920x1080", "2560x1440", "1366x768", "1440x900",
+		"1536x864", "1680x1050", "1280x720", "1600x900",
+		"1920x1200", "3840x2160", "1280x800", "1024x768",
+		"2560x1600", "2880x1800", "3440x1440", "2048x1152",
+	}
+	screenRes := screenResolutions[rand.Intn(len(screenResolutions))]
+
+	// Diverse timezone offset hints
+	timezoneOffsets := []int{4294705152, -4294705152, 8589410304, -8589410304, 0}
+
 	sdkJS := "https://sentinel.openai.com/sentinel/20260124ceb8/sdk.js"
+	langChoices := []struct{ lang, acceptLang string }{
+		{"en-US", "en-US,en"},
+		{"en-GB", "en-GB,en;q=0.9"},
+		{"en-CA", "en-CA,en;q=0.9"},
+		{"en-AU", "en-AU,en;q=0.9"},
+		{"fr-FR", "fr-FR,fr;q=0.9"},
+		{"de-DE", "de-DE,de;q=0.9"},
+		{"es-ES", "es-ES,es;q=0.9"},
+		{"ja-JP", "ja-JP,ja;q=0.9"},
+	}
+	lc := langChoices[rand.Intn(len(langChoices))]
 
 	return []any{
 		screenRes,
 		nowStr,
-		4294705152,
+		timezoneOffsets[rand.Intn(len(timezoneOffsets))],
 		0, // nonce placeholder
 		g.UserAgent,
 		sdkJS,
 		nil,
 		nil,
-		"en-US",
-		"en-US,en",
+		lc.lang,
+		lc.acceptLang,
 		rand.Float64(),
 		navVal,
 		[]string{"location", "implementation", "URL", "documentURI", "compatMode"}[rand.Intn(5)],
@@ -70,7 +92,7 @@ func (g *SentinelTokenGenerator) getConfig() []any {
 		perfNow,
 		g.SID,
 		"",
-		[]int{4, 8, 12, 16}[rand.Intn(4)],
+		[]int{2, 4, 8, 12, 16, 32}[rand.Intn(6)],
 		timeOrigin,
 	}
 }
