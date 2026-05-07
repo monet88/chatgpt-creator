@@ -204,20 +204,19 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 	username := parts[0]
 	domain := parts[1]
 
+	options := []tls_client.HttpClientOption{
+		tls_client.WithClientProfile(randomTLSProfile()),
+	}
+	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+	if err != nil {
+		return "", fmt.Errorf("failed to create tls client: %w", err)
+	}
+
 	for i := 0; i < maxRetries; i++ {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		default:
-		}
-
-		options := []tls_client.HttpClientOption{
-			tls_client.WithClientProfile(randomTLSProfile()),
-		}
-
-		client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
-		if err != nil {
-			return "", fmt.Errorf("failed to create tls client: %w", err)
 		}
 
 		mailboxURL := generatorEmailURL(domain, username)

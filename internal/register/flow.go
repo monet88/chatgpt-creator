@@ -1,6 +1,7 @@
 package register
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -140,17 +141,13 @@ func (c *Client) register(email, password string) (int, map[string]interface{}, 
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", regURL, strings.NewReader(string(jsonPayload)))
+	req, _ := http.NewRequest("POST", regURL, bytes.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/create-account/password")
 	req.Header.Set("Origin", authURL)
 
-	// Add trace headers if available in util
-	traceHeaders := util.MakeTraceHeaders()
-	for k, v := range traceHeaders {
-		req.Header.Set(k, v)
-	}
+	applyTraceHeaders(req)
 
 	resp, err := c.do(req)
 	if err != nil {
@@ -196,16 +193,13 @@ func (c *Client) validateOTP(code string) (int, map[string]interface{}, error) {
 	payload := map[string]string{"code": code}
 	jsonPayload, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", valURL, strings.NewReader(string(jsonPayload)))
+	req, _ := http.NewRequest("POST", valURL, bytes.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/email-verification")
 	req.Header.Set("Origin", authURL)
 
-	traceHeaders := util.MakeTraceHeaders()
-	for k, v := range traceHeaders {
-		req.Header.Set(k, v)
-	}
+	applyTraceHeaders(req)
 
 	resp, err := c.do(req)
 	if err != nil {
@@ -235,17 +229,14 @@ func (c *Client) createAccount(name, birthdate string) (int, map[string]interfac
 		return 0, nil, fmt.Errorf("failed to get sentinel auth: %v", err)
 	}
 
-	req, _ := http.NewRequest("POST", createURL, strings.NewReader(string(jsonPayload)))
+	req, _ := http.NewRequest("POST", createURL, bytes.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/about-you")
 	req.Header.Set("Origin", authURL)
 	req.Header.Set("openai-sentinel-token", sentinelCreateAccount)
 
-	traceHeaders := util.MakeTraceHeaders()
-	for k, v := range traceHeaders {
-		req.Header.Set(k, v)
-	}
+	applyTraceHeaders(req)
 
 	resp, err := c.do(req)
 	if err != nil {
@@ -283,6 +274,25 @@ func (c *Client) callback(cbURL string) (int, map[string]interface{}, error) {
 
 func (c *Client) RunRegister(emailAddr, password, name, birthdate string) error {
 	return c.RunRegisterWithContext(context.Background(), emailAddr, password, name, birthdate)
+}
+
+func applyTraceHeaders(req *http.Request) {
+	for k, v := range util.MakeTraceHeaders() {
+		req.Header.Set(k, v)
+	}
+}
+
+func extractCallbackURL(data map[string]interface{}) string {
+	for _, key := range []string{"continue_url", "url", "redirect_url"} {
+		if nextURL, ok := data[key].(string); ok {
+			return nextURL
+		}
+	}
+	return ""
+}
+
+func isSuccessStatus(status int) bool {
+	return status >= 200 && status < 400
 }
 
 func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
@@ -331,13 +341,19 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 		if runErr != nil {
 			return WrapFailure("register", status, runErr)
 		}
-		if status != 200 {
+		if !isSuccessStatus(status) {
 			return NewFailure(classifyStatusFailure(status, data), "register", status, fmt.Errorf("register failed: %v", data))
 		}
 		if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
 			return WrapFailure("post_register_delay", 0, err)
 		}
-		_, _, _ = c.sendOTP()
+		status, data, sendErr := c.sendOTP()
+		if sendErr != nil {
+			return WrapFailure("send_otp", status, sendErr)
+		}
+		if !isSuccessStatus(status) {
+			return NewFailure(classifyStatusFailure(status, data), "send_otp", status, fmt.Errorf("send otp failed: %v", data))
+		}
 		needOTP = true
 	} else if strings.Contains(finalPath, "email-verification") || strings.Contains(finalPath, "email-otp") {
 		c.print("Jump to OTP verification stage")
@@ -351,30 +367,41 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 		if runErr != nil {
 			return WrapFailure("create_account", status, runErr)
 		}
-		if status != 200 {
+		if !isSuccessStatus(status) {
 			return NewFailure(classifyStatusFailure(status, data), "create_account", status, fmt.Errorf("create account failed: %v", data))
 		}
 		if err := c.randomDelayWithContext(ctx, 0.3, 0.5); err != nil {
 			return WrapFailure("post_create_account_delay", 0, err)
 		}
 
-		var cbURL string
-		if nextURL, ok := data["continue_url"].(string); ok {
-			cbURL = nextURL
-		} else if nextURL, ok := data["url"].(string); ok {
-			cbURL = nextURL
-		} else if nextURL, ok := data["redirect_url"].(string); ok {
-			cbURL = nextURL
+		cbURL := extractCallbackURL(data)
+		status, data, callbackErr := c.callback(cbURL)
+		if callbackErr != nil {
+			return WrapFailure("callback", status, callbackErr)
 		}
-		_, _, _ = c.callback(cbURL)
+		if !isSuccessStatus(status) {
+			return NewFailure(classifyStatusFailure(status, data), "callback", status, fmt.Errorf("callback failed: %v", data))
+		}
 		return nil
 	} else if strings.Contains(finalPath, "callback") || strings.Contains(finalURL, "chatgpt.com") {
 		c.print("Account registration completed")
 		return nil
 	} else {
 		c.print(fmt.Sprintf("Unknown jump: %s", finalURL))
-		_, _, _ = c.register(emailAddr, password)
-		_, _, _ = c.sendOTP()
+		status, data, runErr := c.register(emailAddr, password)
+		if runErr != nil {
+			return WrapFailure("register", status, runErr)
+		}
+		if !isSuccessStatus(status) {
+			return NewFailure(classifyStatusFailure(status, data), "register", status, fmt.Errorf("register failed: %v", data))
+		}
+		status, data, sendErr := c.sendOTP()
+		if sendErr != nil {
+			return WrapFailure("send_otp", status, sendErr)
+		}
+		if !isSuccessStatus(status) {
+			return NewFailure(classifyStatusFailure(status, data), "send_otp", status, fmt.Errorf("send otp failed: %v", data))
+		}
 		needOTP = true
 	}
 
@@ -387,14 +414,20 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 		if err := c.randomDelayWithContext(ctx, 0.3, 0.8); err != nil {
 			return WrapFailure("pre_validate_otp_delay", 0, err)
 		}
-		status, data, validateErr := c.validateOTP(otpCode)
+		status, _, validateErr := c.validateOTP(otpCode)
 		if validateErr != nil {
 			return WrapFailure("validate_otp", status, validateErr)
 		}
 
-		if status != 200 {
+		if !isSuccessStatus(status) {
 			c.print("Verification code failed, retrying...")
-			_, _, _ = c.sendOTP()
+			status, data, sendErr := c.sendOTP()
+			if sendErr != nil {
+				return WrapFailure("retry_send_otp", status, sendErr)
+			}
+			if !isSuccessStatus(status) {
+				return NewFailure(classifyStatusFailure(status, data), "retry_send_otp", status, fmt.Errorf("send otp failed: %v", data))
+			}
 			if err := c.randomDelayWithContext(ctx, 1.0, 2.0); err != nil {
 				return WrapFailure("retry_otp_delay", 0, err)
 			}
@@ -409,7 +442,7 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 			if validateErr != nil {
 				return WrapFailure("retry_validate_otp", status, validateErr)
 			}
-			if status != 200 {
+			if !isSuccessStatus(status) {
 				return NewFailure(FailureOTPTimeout, "validate_otp", status, fmt.Errorf("verification code failed after retry: %v", data))
 			}
 		}
@@ -422,22 +455,21 @@ func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password
 	if createErr != nil {
 		return WrapFailure("final_create_account", status, createErr)
 	}
-	if status != 200 {
+	if !isSuccessStatus(status) {
 		return NewFailure(classifyStatusFailure(status, data), "final_create_account", status, fmt.Errorf("create account failed: %v", data))
 	}
 
 	if err := c.randomDelayWithContext(ctx, 0.2, 0.5); err != nil {
 		return WrapFailure("pre_callback_delay", 0, err)
 	}
-	var cbURL string
-	if nextURL, ok := data["continue_url"].(string); ok {
-		cbURL = nextURL
-	} else if nextURL, ok := data["url"].(string); ok {
-		cbURL = nextURL
-	} else if nextURL, ok := data["redirect_url"].(string); ok {
-		cbURL = nextURL
+	cbURL := extractCallbackURL(data)
+	status, data, callbackErr := c.callback(cbURL)
+	if callbackErr != nil {
+		return WrapFailure("callback", status, callbackErr)
 	}
-	_, _, _ = c.callback(cbURL)
+	if !isSuccessStatus(status) {
+		return NewFailure(classifyStatusFailure(status, data), "callback", status, fmt.Errorf("callback failed: %v", data))
+	}
 
 	return nil
 }

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 // Pool provides proxy URL rotation with health tracking.
@@ -36,25 +38,25 @@ type proxyEntry struct {
 	failures         atomic.Int64
 	consecutiveFails atomic.Int64
 	mu               sync.RWMutex
-	coolUtil         time.Time
+	coolUntilAt      time.Time
 }
 
 func (e *proxyEntry) isCooling(now time.Time) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return now.Before(e.coolUtil)
+	return now.Before(e.coolUntilAt)
 }
 
 func (e *proxyEntry) setCooldown(until time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.coolUtil = until
+	e.coolUntilAt = until
 }
 
 func (e *proxyEntry) coolUntil() time.Time {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.coolUtil
+	return e.coolUntilAt
 }
 
 func (e *proxyEntry) stats() ProxyStats {
@@ -73,6 +75,7 @@ func (e *proxyEntry) stats() ProxyStats {
 // RoundRobinPool rotates proxies in order, skipping those in cooldown.
 type RoundRobinPool struct {
 	entries  []*proxyEntry
+	byURL    map[string]*proxyEntry
 	index    atomic.Int64
 	cooldown time.Duration
 }
@@ -83,10 +86,16 @@ func NewRoundRobinPool(proxies []string, cooldown time.Duration) (*RoundRobinPoo
 		return nil, fmt.Errorf("proxy pool: no proxies provided")
 	}
 	entries := make([]*proxyEntry, len(proxies))
+	byURL := make(map[string]*proxyEntry, len(proxies))
 	for i, p := range proxies {
-		entries[i] = &proxyEntry{url: p}
+		if _, exists := byURL[p]; exists {
+			return nil, fmt.Errorf("proxy pool: duplicate proxy URL %q", p)
+		}
+		entry := &proxyEntry{url: p}
+		entries[i] = entry
+		byURL[p] = entry
 	}
-	return &RoundRobinPool{entries: entries, cooldown: cooldown}, nil
+	return &RoundRobinPool{entries: entries, byURL: byURL, cooldown: cooldown}, nil
 }
 
 // NewSinglePool wraps a single proxy URL into a pool for backward compatibility.
@@ -120,40 +129,37 @@ func (p *RoundRobinPool) Next(ctx context.Context) (string, error) {
 			continue // Already recovered, retry
 		}
 
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(waitDur):
-			// Retry after cooldown
+		if err := util.WaitWithContext(ctx, waitDur); err != nil {
+			return "", err
 		}
 	}
 }
 
 // Report records the outcome of a proxy request.
 func (p *RoundRobinPool) Report(proxyURL string, success bool) {
-	for _, e := range p.entries {
-		if e.url == proxyURL {
-			if success {
-				e.success.Add(1)
-				e.consecutiveFails.Store(0)
-			} else {
-				e.failures.Add(1)
-				cf := e.consecutiveFails.Add(1)
-				const maxFactor = int64(10)
-				factor := int64(1)
-				if cf > 1 {
-					shift := cf - 1
-					if shift >= 4 {
-						factor = maxFactor
-					} else {
-						factor = int64(1) << shift
-					}
-				}
-				e.setCooldown(time.Now().Add(p.cooldown * time.Duration(factor)))
-			}
-			return
+	e, ok := p.byURL[proxyURL]
+	if !ok {
+		return
+	}
+	if success {
+		e.success.Add(1)
+		e.consecutiveFails.Store(0)
+		return
+	}
+
+	e.failures.Add(1)
+	cf := e.consecutiveFails.Add(1)
+	const maxFactor = int64(10)
+	factor := int64(1)
+	if cf > 1 {
+		shift := cf - 1
+		if shift >= 4 {
+			factor = maxFactor
+		} else {
+			factor = int64(1) << shift
 		}
 	}
+	e.setCooldown(time.Now().Add(p.cooldown * time.Duration(factor)))
 }
 
 // Stats returns a snapshot of all proxy health statistics.

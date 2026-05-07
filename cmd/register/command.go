@@ -140,7 +140,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				cmd.Flags().Changed("codex") ||
 				cmd.Flags().Changed("codex-output")
 			if interactive || !hasActionableFlags {
-				return runInteractive(in, out, errOut, cfg, effectiveOutput)
+				return runInteractive(cmd.Context(), in, out, errOut, cfg, effectiveOutput)
 			}
 
 			effectiveViOTPToken := cfg.ViOTPToken
@@ -259,7 +259,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				withDiagnosticWriter(errOut, func() {
 					opts := register.DefaultBatchOptionsForCLI(total)
 					opts.PacingProfile = pacingProfile
-					result = runBatchWithProviders(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
+					result = runBatchWithProviders(cmd.Context(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 				})
 				if err := json.NewEncoder(out).Encode(result); err != nil {
 					return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to encode json result: %w", err)}
@@ -272,7 +272,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 
 			opts := register.DefaultBatchOptionsForCLI(total)
 			opts.PacingProfile = pacingProfile
-			result := runBatchWithProviders(context.Background(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
+			result := runBatchWithProviders(cmd.Context(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 			if result.Success < int64(result.Target) {
 				return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: target not reached (%d/%d), stop_reason=%s", result.Success, result.Target, result.StopReason)}
 			}
@@ -312,7 +312,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	return cmd
 }
 
-func runInteractive(in io.Reader, out, errOut io.Writer, cfg *config.Config, outputFile string) error {
+func runInteractive(ctx context.Context, in io.Reader, out, errOut io.Writer, cfg *config.Config, outputFile string) error {
 	printBanner(out)
 
 	reader := bufio.NewReader(in)
@@ -407,7 +407,7 @@ func runInteractive(in io.Reader, out, errOut io.Writer, cfg *config.Config, out
 
 	opts := register.DefaultBatchOptionsForCLI(totalAccounts)
 	opts.PacingProfile = pacingProfile
-	_ = runBatchForCLI(context.Background(), totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain, opts)
+	_ = runBatchForCLI(ctx, totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain, opts)
 	return nil
 }
 

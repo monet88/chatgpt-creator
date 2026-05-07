@@ -5,6 +5,19 @@ import (
 	"time"
 )
 
+func TestIsSuccessStatusIncludesRedirects(t *testing.T) {
+	for _, status := range []int{200, 201, 204, 302, 307} {
+		if !isSuccessStatus(status) {
+			t.Fatalf("status %d should be success", status)
+		}
+	}
+	for _, status := range []int{199, 400, 429, 500} {
+		if isSuccessStatus(status) {
+			t.Fatalf("status %d should not be success", status)
+		}
+	}
+}
+
 func TestParsePacingProfile(t *testing.T) {
 	tests := []struct {
 		input   string

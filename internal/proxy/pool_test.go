@@ -28,6 +28,16 @@ func TestNewSinglePool(t *testing.T) {
 	}
 }
 
+func TestNewRoundRobinPoolRejectsDuplicateProxyURLs(t *testing.T) {
+	_, err := NewRoundRobinPool([]string{"http://a:1", "http://a:1"}, 0)
+	if err == nil {
+		t.Fatal("expected duplicate proxy URL error")
+	}
+	if !strings.Contains(err.Error(), "duplicate proxy URL") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRoundRobinRotation(t *testing.T) {
 	proxies := []string{"http://a:1", "http://b:2", "http://c:3"}
 	pool, err := NewRoundRobinPool(proxies, 0)
