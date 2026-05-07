@@ -7,11 +7,20 @@
 
 ## Core Commands
 
+### Root CLI
+
 ```bash
 go test ./...
 go test -race ./...
 go test -cover ./...
 go vet ./...
+```
+
+### Standalone Worker app
+
+```bash
+npm --prefix cloudflare-temp-mail run build
+npm --prefix cloudflare-temp-mail run test
 ```
 
 ## Coverage Areas
@@ -27,8 +36,8 @@ go vet ./...
 
 ## Offline Test Policy
 
-- Do not hit live external endpoints in default `go test ./...`.
-- Use fakes/stubs around `RunBatch` and flow dependencies.
+- Do not hit live external endpoints in default `go test ./...` or `npm --prefix cloudflare-temp-mail run test`.
+- Use fakes/stubs around `RunBatch`, Worker env bindings, and flow dependencies.
 
 ## When to Add Integration Tests
 

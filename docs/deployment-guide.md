@@ -2,8 +2,12 @@
 
 ## Purpose
 
-This project is a CLI tool (not a long-running server). "Deployment" means preparing an execution environment where operators run the command safely and repeatably.
+This repository now includes:
 
+1. A root CLI tool (`chatgpt-creator`).
+2. A standalone Cloudflare Workers app (`cloudflare-temp-mail`).
+
+Deployment guidance covers both execution surfaces.
 ## Environment Requirements
 
 - Linux/macOS shell (Windows may work with Go toolchain but is not verified in this snapshot).
@@ -42,6 +46,40 @@ go run cmd/register/main.go
 - Rotate output files by date/batch.
 - Avoid committing runtime artifacts (`results.txt`, `blacklist.json`) to git.
 - Monitor for endpoint/schema drift if runs start failing consistently.
+
+## Standalone Worker Deployment (`cloudflare-temp-mail`)
+
+### Requirements
+
+- Node.js + npm
+- Cloudflare account with Workers, D1, R2, and Email Routing enabled
+- Wrangler CLI (via project dependency)
+
+### Local Validation
+
+```bash
+npm --prefix cloudflare-temp-mail run build
+npm --prefix cloudflare-temp-mail run test
+npm --prefix cloudflare-temp-mail run dev
+```
+
+### Config Surface (verified)
+
+From `cloudflare-temp-mail/wrangler.toml`:
+
+- `ENABLED_DOMAINS`
+- `RETENTION_DAYS`
+- `MAX_MESSAGE_BYTES`
+- `PAGE_LIMIT`
+- `CLEANUP_BATCH_SIZE`
+- D1 binding: `DB`
+- R2 binding: `MAIL_BUCKET`
+- Cron trigger: `*/30 * * * *`
+
+### Contract Reference
+
+- API contract: `cloudflare-temp-mail/docs/api-contract.md`
+- API base path: `/api/v1`
 
 ## Troubleshooting
 

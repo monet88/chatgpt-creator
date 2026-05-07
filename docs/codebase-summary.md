@@ -1,61 +1,72 @@
 # Codebase Summary
 
-_Last updated: 2026-05-06_
+_Last updated: 2026-05-07_
 
 ## Repository Snapshot
 
-- Primary language: Go
-- Packaging: Go modules (`go.mod`)
-- Entry point: `cmd/register/main.go`
-- CLI parser: `github.com/spf13/cobra`
-- Core internal modules: `config`, `register`, `email`, `chrome`, `sentinel`, `util`
+- Primary language: Go (root CLI) + TypeScript (standalone Cloudflare Worker app)
+- Root packaging: Go modules (`go.mod`)
+- Root entry point: `cmd/register/main.go`
+- Standalone app location: `cloudflare-temp-mail/`
+- Standalone app runtime: Cloudflare Workers + D1 + R2 + Email Routing
 
-## High-Level Execution Path
+## Top-Level Products
+
+### 1) `chatgpt-creator` CLI (Go)
+
+- Purpose: batch registration CLI with OTP automation.
+- Main path: `cmd/register` + `internal/*`.
+- External dependencies: OpenAI auth/sentinel endpoints and `generator.email`.
+- Output artifacts: credential output file + `blacklist.json`.
+
+### 2) `cloudflare-temp-mail` (TypeScript Worker)
+
+- Purpose: standalone temp-mail API/UI service, intended to be consumed over HTTP.
+- Main path: `cloudflare-temp-mail/src/worker.ts`.
+- API prefix: `/api/v1` (`cloudflare-temp-mail/src/config/app-config.ts`).
+- Data/storage: D1 metadata + R2 payload objects.
+- Inbound handling: `email()` handler for Cloudflare Email Routing.
+- Retention: scheduled cleanup via cron trigger (`*/30 * * * *` in `wrangler.toml`).
+
+## High-Level Execution Paths
+
+### CLI path (Go)
 
 1. CLI parses flags via Cobra.
-2. Config is loaded from JSON with defaults and `PROXY` env override.
-3. Runtime options are validated (safe mode fail-closed for ViOTP and Codex flags/config).
-4. Batch runner executes worker loop with context-aware controls.
-5. Each worker builds client, generates temp email, runs flow, writes credential line on success.
-6. Batch returns structured `BatchResult` with stop reason, failure summary, and optional proxy stats.
-7. Optional `--json` emits summary to stdout while diagnostics go to stderr.
+2. Config loads from JSON with defaults and `PROXY` env override.
+3. Runtime options are validated.
+4. Batch runner executes worker loop with runtime controls.
+5. Worker runs registration flow + OTP polling and writes credential on success.
+6. Batch returns structured summary (`BatchResult`).
 
-## Package-Level Summary
+### Worker path (Cloudflare)
 
-### `cmd/register`
-- Non-interactive command execution and interactive fallback.
-- Exit code mapping for validation/config/runtime errors.
-- JSON mode wiring and stream separation.
+1. Fetch handler checks optional bearer auth (`API_TOKEN`) and serves UI assets/health.
+2. API routes are matched under `/api/v1` through custom router.
+3. Route handlers validate input/domain and use D1/R2-backed services.
+4. `email()` persists inbound message data for mailbox/OTP retrieval.
+5. Scheduled handler runs cleanup to purge expired payloads.
 
-### `internal/config`
-- Config defaults and `Load(path)` behavior.
-- Password length validation and environment override support.
+## Validation Commands (Current)
 
-### `internal/register`
-- `batch.go`: bounded runtime orchestration, retry controls, failure summary, stop reasons, provider overrides for OTP/proxy pool only.
-- `failures.go`: typed failure taxonomy and classification helpers (including `phone_challenge` detection).
-- `retry.go`: context-aware wait and backoff delay.
-- `flow.go`: context-aware registration flow with typed failure wrapping.
-- `redact.go`: password/proxy/token log redaction helpers.
-- `logging.go`: diagnostic stream control.
-- `result.go`: `BatchResult` and `StopReason` model (includes optional proxy stats snapshot).
+### Root CLI
 
-### `internal/email`
-- Temp email creation and blacklist lifecycle.
-- OTP parser extracted for unit tests.
-- IMAP catch-all OTP provider with reconnect path and recipient-scoped mailbox search.
-- Context-aware OTP polling via `GetVerificationCodeWithContext` and `IMAPPooler.GetOTP`.
+```bash
+go test ./...
+go test -race ./...
+go test -cover ./...
+go vet ./...
+```
 
-### `internal/sentinel`
-- Sentinel challenge request and token construction.
+### Standalone Worker app
 
-## Key Runtime Files
+```bash
+npm --prefix cloudflare-temp-mail run build
+npm --prefix cloudflare-temp-mail run test
+npm --prefix cloudflare-temp-mail run dev
+```
 
-- `config.json` (input config)
-- output file from config/flag (default: `results.txt`)
-- `blacklist.json` (persistent unsupported domain blacklist)
+## API Contract Reference
 
-## Testing Status
-
-- Offline unit tests present across `cmd/register`, `internal/config`, `internal/email`, `internal/register`.
-- Runtime controls, stream behavior, redaction, and failure classification are covered by tests.
+- Worker API contract: `cloudflare-temp-mail/docs/api-contract.md`
+- Integration boundary rule: consuming systems should use HTTP endpoints only, not Worker internals.

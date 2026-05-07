@@ -17,3 +17,9 @@ repomix-output.xml
 release-manifest.json
 .repomixignore
 .agents
+
+# JavaScript/Cloudflare local artifacts
+node_modules/
+.wrangler/
+cloudflare-temp-mail/node_modules/
+cloudflare-temp-mail/.wrangler/

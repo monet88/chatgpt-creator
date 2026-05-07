@@ -2,7 +2,12 @@
 
 ## Project Overview
 
-`chatgpt-creator` is a Go CLI that attempts batch account registration by orchestrating HTTP flows against OpenAI auth endpoints, with worker concurrency and email OTP automation.
+`chatgpt-creator` now contains two products:
+
+1. Root Go CLI for batch account registration (`cmd/register`, `internal/*`).
+2. Standalone `cloudflare-temp-mail` Cloudflare Workers app for temp mailbox API/UI (`cloudflare-temp-mail/`).
+
+The Worker app is independently deployable and should be integrated through its HTTP API contract (`cloudflare-temp-mail/docs/api-contract.md`) rather than by importing internals.
 
 ## Product Goals
 
@@ -12,10 +17,17 @@
 
 ## Non-Goals (Current State)
 
-- No web UI.
-- No persistent database.
+### Root Go CLI
+
+- No web UI for registration flow.
+- No persistent database in root CLI runtime.
 - No distributed queue/orchestration.
 - No built-in CAPTCHA solver beyond Sentinel token handling.
+
+### Standalone Worker app
+
+- No direct coupling to root CLI internals.
+- No multi-provider SMTP ingestion layer outside Cloudflare Email Routing.
 
 ## Functional Requirements (Verified)
 

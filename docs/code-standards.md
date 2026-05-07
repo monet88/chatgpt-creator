@@ -2,7 +2,10 @@
 
 ## Scope
 
-Applies to Go source under `cmd/` and `internal/`.
+Applies to:
+
+- Go source under `cmd/` and `internal/`.
+- Standalone Worker source under `cloudflare-temp-mail/src/`.
 
 ## Core Principles
 
@@ -39,11 +42,14 @@ Applies to Go source under `cmd/` and `internal/`.
 - Default tests must stay offline.
 - Use table-driven tests for parsers and validation behavior.
 - Keep fake dependencies around network boundaries.
-- Validation baseline:
+- Validation baseline (root CLI):
   - `go test ./...`
   - `go test -race ./...`
   - `go test -cover ./...`
   - `go vet ./...`
+- Validation baseline (standalone Worker):
+  - `npm --prefix cloudflare-temp-mail run build`
+  - `npm --prefix cloudflare-temp-mail run test`
 
 ## Documentation Sync Rule
 

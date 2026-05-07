@@ -1,0 +1,24 @@
+name = "cloudflare-temp-mail"
+main = "src/worker.ts"
+compatibility_date = "2026-05-07"
+workers_dev = true
+
+[vars]
+ENABLED_DOMAINS = "example.com"
+RETENTION_DAYS = "3"
+MAX_MESSAGE_BYTES = "1048576"
+PAGE_LIMIT = "50"
+CLEANUP_BATCH_SIZE = "100"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudflare-temp-mail"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MAIL_BUCKET"
+bucket_name = "cloudflare-temp-mail"
+
+[triggers]
+crons = ["*/30 * * * *"]

@@ -2,7 +2,10 @@
 
 ## Overview
 
-Single-process CLI with worker goroutines. Runtime is bounded by context-aware controls and explicit stop conditions.
+Repository architecture now has two independent runtime surfaces:
+
+1. Single-process Go CLI with worker goroutines (`cmd/register`, `internal/*`).
+2. Standalone Cloudflare Worker app (`cloudflare-temp-mail`) with HTTP API, inbound email handler, and scheduled cleanup.
 
 ## Component Diagram
 
@@ -63,7 +66,14 @@ Typed kinds:
 
 ## External Interfaces
 
+### Root CLI
 - `https://chatgpt.com`
 - `https://auth.openai.com`
 - `https://sentinel.openai.com`
 - `https://generator.email`
+
+### Standalone Worker app
+- Cloudflare Workers runtime (`fetch`, `email`, `scheduled` handlers)
+- Cloudflare Email Routing (inbound message source)
+- D1 (`DB` binding) for mailbox metadata
+- R2 (`MAIL_BUCKET` binding) for message payload storage

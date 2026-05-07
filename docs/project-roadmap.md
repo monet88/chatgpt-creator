@@ -26,7 +26,8 @@
 - Preserved `email|password` output file compatibility.
 
 ### M4 — Ongoing Maintenance (In Progress)
-- Keep docs synced with behavior.
+- Keep docs synced with behavior across both products (Go CLI + standalone Worker app).
+- Maintain Worker API contract and deployment/testing docs as Cloudflare routes/features evolve.
 - Expand drift-detection and integration safety checks when needed.
 
 ## Maintenance Cadence

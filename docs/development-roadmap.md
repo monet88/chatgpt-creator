@@ -35,4 +35,5 @@ _Last updated: 2026-05-07_
 ## Next Focus
 
 - Keep integration behavior stable as upstream contracts evolve.
+- Maintain standalone Worker API contract alignment (`cloudflare-temp-mail/docs/api-contract.md`) as routes evolve.
 - Add targeted integration safety tests when external endpoint behavior changes.
