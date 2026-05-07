@@ -135,6 +135,24 @@ func TestReportSuccess(t *testing.T) {
 	}
 }
 
+func TestReportCapsLargeConsecutiveFailureCooldown(t *testing.T) {
+	cooldown := 10 * time.Millisecond
+	pool := NewSinglePool("http://a:1")
+	pool.cooldown = cooldown
+	pool.entries[0].consecutiveFails.Store(63)
+
+	before := time.Now()
+	pool.Report("http://a:1", false)
+
+	coolUntil := pool.entries[0].coolUntil()
+	if coolUntil.Before(before.Add(9 * cooldown)) {
+		t.Fatalf("cooldown too short: got %v, want at least %v", coolUntil.Sub(before), 9*cooldown)
+	}
+	if coolUntil.After(time.Now().Add(11 * cooldown)) {
+		t.Fatalf("cooldown too long: got %v, want about %v", coolUntil.Sub(before), 10*cooldown)
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	proxies := []string{"http://a:1", "http://b:2", "http://c:3"}
 	pool, err := NewRoundRobinPool(proxies, 50*time.Millisecond)

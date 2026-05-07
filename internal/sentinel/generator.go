@@ -59,7 +59,7 @@ func (g *SentinelTokenGenerator) getConfig() []any {
 	screenRes := screenResolutions[rand.Intn(len(screenResolutions))]
 
 	// Diverse timezone offset hints
-	timezoneOffsets := []int{4294705152, -4294705152, 8589410304, -8589410304, 0}
+	timezoneOffsets := []int64{4294705152, -4294705152, 8589410304, -8589410304, 0}
 
 	sdkJS := "https://sentinel.openai.com/sentinel/20260124ceb8/sdk.js"
 	langChoices := []struct{ lang, acceptLang string }{

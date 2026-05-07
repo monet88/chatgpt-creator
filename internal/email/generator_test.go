@@ -5,6 +5,22 @@ import (
 	"testing"
 )
 
+func TestGeneratorEmailMailboxPathEscapesSegments(t *testing.T) {
+	got := generatorEmailMailboxPath("example.com", "user/name;tag")
+	want := "example.com/user%2Fname%3Btag"
+	if got != want {
+		t.Fatalf("generatorEmailMailboxPath() = %q, want %q", got, want)
+	}
+}
+
+func TestGeneratorEmailURLEscapesPathSegments(t *testing.T) {
+	got := generatorEmailURL("example.com", "user/name;tag")
+	want := "https://generator.email/example.com/user%2Fname%3Btag"
+	if got != want {
+		t.Fatalf("generatorEmailURL() = %q, want %q", got, want)
+	}
+}
+
 func TestCreateTempEmail_WithDefaultDomain(t *testing.T) {
 	tests := []struct {
 		name   string

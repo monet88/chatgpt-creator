@@ -139,14 +139,15 @@ func (p *RoundRobinPool) Report(proxyURL string, success bool) {
 			} else {
 				e.failures.Add(1)
 				cf := e.consecutiveFails.Add(1)
-				// Exponential backoff: base * 2^(cf-1), capped at 10 * base
+				const maxFactor = int64(10)
 				factor := int64(1)
 				if cf > 1 {
-					factor = int64(1) << (cf - 1)
-				}
-				const maxFactor = 10
-				if factor > maxFactor {
-					factor = maxFactor
+					shift := cf - 1
+					if shift >= 4 {
+						factor = maxFactor
+					} else {
+						factor = int64(1) << shift
+					}
 				}
 				e.setCooldown(time.Now().Add(p.cooldown * time.Duration(factor)))
 			}

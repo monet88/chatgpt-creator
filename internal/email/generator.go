@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -151,6 +152,14 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 
 var otpRegex = regexp.MustCompile(`\d{6}`)
 
+func generatorEmailMailboxPath(domain, username string) string {
+	return fmt.Sprintf("%s/%s", url.PathEscape(domain), url.PathEscape(username))
+}
+
+func generatorEmailURL(domain, username string) string {
+	return "https://generator.email/" + generatorEmailMailboxPath(domain, username)
+}
+
 func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
@@ -211,13 +220,13 @@ func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetrie
 			return "", fmt.Errorf("failed to create tls client: %w", err)
 		}
 
-		url := fmt.Sprintf("https://generator.email/%s/%s", domain, username)
-		req, err := fhttp.NewRequest(http.MethodGet, url, nil)
+		mailboxURL := generatorEmailURL(domain, username)
+		req, err := fhttp.NewRequest(http.MethodGet, mailboxURL, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to create request: %w", err)
 		}
 
-		req.Header.Set("Cookie", fmt.Sprintf("surl=%s/%s", domain, username))
+		req.Header.Set("Cookie", "surl="+generatorEmailMailboxPath(domain, username))
 
 		resp, err := client.Do(req)
 		if err != nil {

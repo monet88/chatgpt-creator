@@ -36,7 +36,6 @@ func (c *Client) visitHomepage() error {
 			return nil
 		}
 		resp.Body.Close()
-		// Jittered exponential backoff to avoid fingerprint-based blocking
 		backoff := time.Duration(500+rand.Intn(1500)) * time.Millisecond
 		time.Sleep(backoff)
 	}
