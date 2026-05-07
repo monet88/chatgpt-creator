@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/phone"
 	"github.com/monet88/chatgpt-creator/internal/proxy"
 	"github.com/monet88/chatgpt-creator/internal/util"
 )
@@ -27,6 +28,10 @@ type batchDependencies struct {
 	reportProxy      func(proxyURL string, success bool)
 	proxyStats       func() map[string]proxy.ProxyStats
 	otpProvider      email.OTPProvider
+	phoneProvider    phone.PhoneProvider
+	viOTPServiceID   int
+	codexEnabled     bool
+	codexOutput      string
 }
 
 func defaultBatchDependencies() batchDependencies {
@@ -57,7 +62,11 @@ func newClientWithDeps(deps batchDependencies, proxy, tag string, workerID int, 
 		return nil, err
 	}
 	if c, ok := client.(*Client); ok {
-		c.otpProvider = deps.otpProvider
+		c.otpProvider    = deps.otpProvider
+		c.phoneProvider  = deps.phoneProvider
+		c.viOTPServiceID = deps.viOTPServiceID
+		c.codexEnabled   = deps.codexEnabled
+		c.codexOutput    = deps.codexOutput
 	}
 	return client, nil
 }

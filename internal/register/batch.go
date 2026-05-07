@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/phone"
 	proxypkg "github.com/monet88/chatgpt-creator/internal/proxy"
 )
 
@@ -109,6 +110,14 @@ type ProviderOptions struct {
 	}
 	// OTPProvider overrides the default generator.email OTP retrieval.
 	OTPProvider email.OTPProvider
+	// PhoneProvider handles SMS-based phone verification challenges.
+	PhoneProvider phone.PhoneProvider
+	// ViOTPServiceID is the ViOTP service ID used for OpenAI SMS verification.
+	ViOTPServiceID int
+	// CodexEnabled enables post-registration Codex OAuth token extraction.
+	CodexEnabled bool
+	// CodexOutput is the JSON file path where Codex tokens are appended.
+	CodexOutput string
 }
 
 // RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
@@ -117,6 +126,14 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 
 	if providers.OTPProvider != nil {
 		deps.otpProvider = providers.OTPProvider
+	}
+	if providers.PhoneProvider != nil {
+		deps.phoneProvider  = providers.PhoneProvider
+		deps.viOTPServiceID = providers.ViOTPServiceID
+	}
+	if providers.CodexEnabled {
+		deps.codexEnabled = true
+		deps.codexOutput  = providers.CodexOutput
 	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool

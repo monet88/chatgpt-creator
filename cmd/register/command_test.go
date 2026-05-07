@@ -226,97 +226,55 @@ func TestCommand_InteractiveFallbackUsesStdin(t *testing.T) {
 	}
 }
 
-func TestCommand_CodexFlagFailsClosed(t *testing.T) {
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+func TestCommand_CodexEnabled_WiredToProviders(t *testing.T) {
+	var capturedProviders register.ProviderOptions
+	prev := runBatchWithProviders
+	runBatchWithProviders = func(_ context.Context, _ int, _ string, _ int, _, _, _ string, _ register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
+		capturedProviders = providers
+		return register.BatchResult{Target: 1, Success: 1}
 	}
-	if !strings.Contains(stderr, "codex extraction is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
+	defer func() { runBatchWithProviders = prev }()
+
+	exitCode, _, _ := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if !capturedProviders.CodexEnabled {
+		t.Fatal("expected CodexEnabled=true in ProviderOptions")
 	}
 }
 
-func TestCommand_CodexConfigFailsClosed(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	content := []byte(`{"codex_enabled":true}`)
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
+func TestCommand_CodexOutputFlag_WiredToProviders(t *testing.T) {
+	var capturedProviders register.ProviderOptions
+	prev := runBatchWithProviders
+	runBatchWithProviders = func(_ context.Context, _ int, _ string, _ int, _, _, _ string, _ register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
+		capturedProviders = providers
+		return register.BatchResult{Target: 1, Success: 1}
 	}
+	defer func() { runBatchWithProviders = prev }()
 
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	exitCode, _, _ := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex", "--codex-output", "custom.json"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
-	if !strings.Contains(stderr, "codex extraction is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
+	if capturedProviders.CodexOutput != "custom.json" {
+		t.Fatalf("CodexOutput = %q, want %q", capturedProviders.CodexOutput, "custom.json")
 	}
 }
 
-func TestCommand_CodexOutputFlagFailsClosed(t *testing.T) {
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--codex-output", "unused.json"}, "")
+// TestCommand_ViOTPFlagIsActionable verifies --viotp-token is treated as an actionable flag
+// (skips interactive prompt and proceeds to non-interactive validation).
+func TestCommand_ViOTPFlagIsActionable(t *testing.T) {
+	// Without --total, the command should reach the --total validation (not interactive prompt).
+	exitCode, stdout, stderr := executeCommandForTest(t, []string{"--viotp-token", "token"}, "")
 	if exitCode != exitCodeValidation {
 		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
 	}
-	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
+	if !strings.Contains(stderr, "--total must be greater than 0") {
 		t.Fatalf("stderr = %q", stderr)
 	}
-}
-
-func TestCommand_CodexOutputConfigFailsClosed(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	content := []byte(`{"codex_output":"unused.json"}`)
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
-	}
-	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
-	}
-}
-
-func TestCommand_CodexOutputEnvFailsClosed(t *testing.T) {
-	before := os.Getenv("CODEX_OUTPUT")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_OUTPUT", before) })
-	if err := os.Setenv("CODEX_OUTPUT", "unused.json"); err != nil {
-		t.Fatalf("Setenv() error = %v", err)
-	}
-
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
-	}
-	if !strings.Contains(stderr, "codex output is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
-	}
-}
-
-func TestCommand_ViOTPFlagFailsClosed(t *testing.T) {
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--viotp-token", "token"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
-	}
-	if !strings.Contains(stderr, "viotp phone challenge automation is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
-	}
-}
-
-func TestCommand_ViOTPConfigFailsClosed(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	content := []byte(`{"viotp_token":"token-from-config"}`)
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	exitCode, _, stderr := executeCommandForTest(t, []string{"--config", configPath, "--total", "1", "--workers", "1"}, "")
-	if exitCode != exitCodeValidation {
-		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
-	}
-	if !strings.Contains(stderr, "viotp phone challenge automation is not supported in safe mode") {
-		t.Fatalf("stderr = %q", stderr)
+	if strings.Contains(stdout, "Total accounts to register:") {
+		t.Fatal("unexpected interactive prompt in stdout")
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/monet88/chatgpt-creator/internal/chrome"
 	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/phone"
 )
 
 const (
@@ -37,6 +38,10 @@ type Client struct {
 	printMu        *sync.Mutex
 	fileMu         *sync.Mutex
 	otpProvider    email.OTPProvider
+	phoneProvider  phone.PhoneProvider
+	viOTPServiceID int
+	codexEnabled   bool
+	codexOutput    string
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {

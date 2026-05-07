@@ -14,6 +14,7 @@ import (
 
 	"github.com/monet88/chatgpt-creator/internal/config"
 	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/phone"
 	proxypool "github.com/monet88/chatgpt-creator/internal/proxy"
 	"github.com/monet88/chatgpt-creator/internal/register"
 	"github.com/spf13/cobra"
@@ -143,6 +144,19 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				return runInteractive(cmd.Context(), in, out, errOut, cfg, effectiveOutput)
 			}
 
+			if total <= 0 {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --total must be greater than 0")}
+			}
+			if workers <= 0 {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --workers must be greater than 0")}
+			}
+			if effectivePassword != "" && len(effectivePassword) < 12 {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: password must be at least 12 characters")}
+			}
+			if strings.TrimSpace(effectiveOutput) == "" {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --output must not be empty")}
+			}
+
 			effectiveViOTPToken := cfg.ViOTPToken
 			if cmd.Flags().Changed("viotp-token") {
 				effectiveViOTPToken = viOTPToken
@@ -151,19 +165,26 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			if cmd.Flags().Changed("viotp-service-id") {
 				effectiveViOTPServiceID = viOTPServiceID
 			}
-			if effectiveViOTPToken != "" || effectiveViOTPServiceID > 0 {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: viotp phone challenge automation is not supported in safe mode")}
+
+			var viOTPClient *phone.ViOTPClient
+			if effectiveViOTPToken != "" {
+				viOTPClient = phone.NewViOTPClient(effectiveViOTPToken)
+				balance, balErr := viOTPClient.CheckBalance(cmd.Context())
+				if balErr != nil {
+					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: ViOTP balance check failed: %w", balErr)}
+				}
+				if balance <= 0 {
+					return &exitError{code: exitCodeConfig, err: fmt.Errorf("config error: ViOTP balance is zero or negative (%d VND)", balance)}
+				}
 			}
 
 			effectiveCodexEnabled := cfg.CodexEnabled
 			if cmd.Flags().Changed("codex") {
 				effectiveCodexEnabled = codexEnabled
 			}
-			if effectiveCodexEnabled {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: codex extraction is not supported in safe mode")}
-			}
-			if cmd.Flags().Changed("codex-output") || cfg.CodexOutput != config.DefaultCodexOutput {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: codex output is not supported in safe mode")}
+			effectiveCodexOutput := cfg.CodexOutput
+			if cmd.Flags().Changed("codex-output") {
+				effectiveCodexOutput = codexOutput
 			}
 
 			var proxyPool *proxypool.RoundRobinPool
@@ -222,19 +243,6 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				otpProvider = pooler
 			}
 
-			if total <= 0 {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --total must be greater than 0")}
-			}
-			if workers <= 0 {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --workers must be greater than 0")}
-			}
-			if effectivePassword != "" && len(effectivePassword) < 12 {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: password must be at least 12 characters")}
-			}
-			if strings.TrimSpace(effectiveOutput) == "" {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --output must not be empty")}
-			}
-
 			effectivePacing := cfg.Pacing
 			if cmd.Flags().Changed("pacing") {
 				effectivePacing = pacing
@@ -252,6 +260,14 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			}
 			if proxyPool != nil {
 				providers.ProxyPool = proxyPool
+			}
+			if viOTPClient != nil {
+				providers.PhoneProvider  = viOTPClient
+				providers.ViOTPServiceID = effectiveViOTPServiceID
+			}
+			if effectiveCodexEnabled {
+				providers.CodexEnabled = true
+				providers.CodexOutput  = effectiveCodexOutput
 			}
 
 			if jsonMode {

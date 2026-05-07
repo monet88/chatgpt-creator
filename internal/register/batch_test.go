@@ -28,12 +28,11 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestProviderOptions_DoesNotExposePhoneOverrides(t *testing.T) {
+func TestProviderOptions_ExposesPhoneAndCodexFields(t *testing.T) {
 	typeOfProviders := reflect.TypeOf(ProviderOptions{})
-	if _, ok := typeOfProviders.FieldByName("PhoneProvider"); ok {
-		t.Fatal("ProviderOptions must not expose PhoneProvider")
-	}
-	if _, ok := typeOfProviders.FieldByName("ViOTPServiceID"); ok {
-		t.Fatal("ProviderOptions must not expose ViOTPServiceID")
+	for _, field := range []string{"PhoneProvider", "ViOTPServiceID", "CodexEnabled", "CodexOutput"} {
+		if _, ok := typeOfProviders.FieldByName(field); !ok {
+			t.Fatalf("ProviderOptions missing expected field %q", field)
+		}
 	}
 }
