@@ -12,9 +12,9 @@ export const jsonOk = <T>(data: T, init: ResponseInit = {}, meta?: Record<string
   return new Response(JSON.stringify(body), { status: 200, ...init, headers });
 };
 
-export const jsonError = (status: number, code: string, message: string) => {
+export const jsonError = (status: number, code: string, message: string, init: ResponseInit = {}) => {
   const body: ApiEnvelope<never> = { success: false, data: null, error: { code, message } };
-  return new Response(JSON.stringify(body), { status, headers });
+  return new Response(JSON.stringify(body), { status, ...init, headers: { ...headers, ...init.headers } });
 };
 
 export const textResponse = (body: string, contentType: string) =>

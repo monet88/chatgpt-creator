@@ -72,6 +72,10 @@ From `cloudflare-temp-mail/wrangler.toml`:
 - `MAX_MESSAGE_BYTES`
 - `PAGE_LIMIT`
 - `CLEANUP_BATCH_SIZE`
+- `API_TOKEN` secret for production API access
+- `AUTH_DISABLED=true` only for explicit local/dev no-auth mode
+- `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS` for per-client HTTP throttling
+- API browser access is same-origin only; see `cloudflare-temp-mail/docs/api-contract.md` for CORS boundary
 - D1 binding: `DB`
 - R2 binding: `MAIL_BUCKET`
 - Cron trigger: `*/30 * * * *`

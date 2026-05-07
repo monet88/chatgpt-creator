@@ -6,7 +6,10 @@ export interface Env {
   MAX_MESSAGE_BYTES?: string;
   PAGE_LIMIT?: string;
   CLEANUP_BATCH_SIZE?: string;
+  RATE_LIMIT_MAX_REQUESTS?: string;
+  RATE_LIMIT_WINDOW_SECONDS?: string;
   API_TOKEN?: string;
+  AUTH_DISABLED?: string;
 }
 
 export interface MessageRow {

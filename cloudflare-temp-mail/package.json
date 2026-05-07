@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "build": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && playwright test",
+    "test:unit": "vitest run",
+    "test:ui": "playwright test",
     "test:watch": "vitest"
   },
   "dependencies": {

@@ -1,5 +1,22 @@
 # Project Changelog
 
+## 2026-05-07 — Cloudflare Temp Mail Hardening
+
+### Changed
+- API auth now fails closed unless `API_TOKEN` is configured or `AUTH_DISABLED=true` is explicitly set for local/dev use.
+- Inbound email now accepts only issued mailboxes, preventing catch-all domain leakage.
+- Mailbox delete now tombstones records and leaves bounded R2 purge to scheduled cleanup.
+- Inbound storage now compensates R2 objects when D1 insert fails.
+- Malformed URL path params now return `400 invalid_path_param` instead of runtime 500.
+- API routes now have best-effort per-isolate rate limiting with `/health` and UI assets exempt.
+- CORS is explicitly documented as same-origin/server-side only for MVP.
+- Test coverage now includes `/health`, `/random-domains`, API rate limiting, cleanup multi-batch behavior, and Playwright UI smoke flow.
+- Fake D1 tests now normalize SQL and fail fast on unhandled statements.
+
+### Validation
+- `npm --prefix cloudflare-temp-mail run build`
+- `npm --prefix cloudflare-temp-mail test`
+
 ## 2026-05-07 — Docs Sync for Standalone Cloudflare Worker App
 
 ### Changed

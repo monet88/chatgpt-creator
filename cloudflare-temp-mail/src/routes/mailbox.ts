@@ -1,7 +1,7 @@
 import { jsonError, jsonOk } from '../lib/http-response';
 import { validateMailboxParams, clampPagination } from '../lib/validation';
+import { revokeMailbox } from '../services/mailbox-service';
 import { readObjectText } from '../services/message-storage';
-import { purgeMessageObjects } from '../services/cleanup-service';
 import type { RouteContext } from '../lib/router';
 import type { MessageRow } from '../types';
 
@@ -43,16 +43,15 @@ export const readMailboxMessage = async ({ env, params }: RouteContext) => {
   return jsonOk({ ...toMessageSummary(row), body: text, html });
 };
 
-export const deleteMailbox = async ({ env, ctx, params }: RouteContext) => {
+export const deleteMailbox = async ({ env, params }: RouteContext) => {
   const mailbox = validateMailboxParams(params.domain, params.user);
   if (!mailbox) return jsonError(400, 'invalid_mailbox', 'Mailbox is invalid');
-  const rows = await env.DB.prepare('SELECT * FROM messages WHERE domain = ? AND user = ? AND purged_at IS NULL')
-    .bind(mailbox.domain, mailbox.user)
-    .all<MessageRow>();
   const deletedAt = new Date().toISOString();
-  await env.DB.prepare('UPDATE messages SET deleted_at = COALESCE(deleted_at, ?) WHERE domain = ? AND user = ?')
+  const result = await env.DB.prepare(
+    'UPDATE messages SET deleted_at = COALESCE(deleted_at, ?) WHERE domain = ? AND user = ? AND deleted_at IS NULL AND purged_at IS NULL',
+  )
     .bind(deletedAt, mailbox.domain, mailbox.user)
     .run();
-  ctx.waitUntil(purgeMessageObjects(env, rows.results));
-  return jsonOk({ deleted: rows.results.length });
+  await revokeMailbox(env, mailbox.domain, mailbox.user);
+  return jsonOk({ deleted: result.meta?.changes ?? 0 });
 };

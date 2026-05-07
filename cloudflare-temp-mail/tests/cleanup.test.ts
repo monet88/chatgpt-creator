@@ -21,6 +21,25 @@ describe('cleanup service', () => {
     expect(state.objects.has('new-raw')).toBe(true);
   });
 
+  test('purges messages across multiple cleanup batches', async () => {
+    const oldDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const { env, state } = createTestEnv({
+      messages: [
+        { id: 'old-1', domain: 'example.com', user: 'tmp', sender: 'a', recipient: 'tmp@example.com', subject: '', received_at: oldDate, raw_key: 'old-1-raw', text_key: null, html_key: null, otp: null, size: 1, deleted_at: null, purged_at: null },
+        { id: 'old-2', domain: 'example.com', user: 'tmp', sender: 'a', recipient: 'tmp@example.com', subject: '', received_at: oldDate, raw_key: 'old-2-raw', text_key: null, html_key: null, otp: null, size: 1, deleted_at: null, purged_at: null },
+      ],
+      objects: new Map([['old-1-raw', 'old'], ['old-2-raw', 'old']]),
+    });
+    env.CLEANUP_BATCH_SIZE = '1';
+
+    expect(await runCleanup(env)).toEqual({ purged: 1 });
+    expect(state.messages.filter((message) => message.purged_at)).toHaveLength(1);
+
+    expect(await runCleanup(env)).toEqual({ purged: 1 });
+    expect(state.messages.filter((message) => message.purged_at)).toHaveLength(2);
+    expect(state.objects.size).toBe(0);
+  });
+
   test('does not mark message purged when R2 delete fails', async () => {
     const oldDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
     const { env, state } = createTestEnv({

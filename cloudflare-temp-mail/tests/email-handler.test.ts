@@ -25,11 +25,15 @@ describe('email handler', () => {
     expect(state.objects.size).toBeGreaterThan(0);
   });
 
-  test('rejects unknown domain and oversized message', async () => {
+  test('rejects unknown domain, non-issued mailbox, and oversized message', async () => {
     const { env } = createTestEnv();
     const unknown = createMessage('tmp@bad.dev', 'Subject: No');
     await handleEmail(unknown, env);
     expect(unknown.rejected).toBe('Unknown recipient domain');
+
+    const nonIssued = createMessage('admin@example.com', 'Subject: No');
+    await handleEmail(nonIssued, env);
+    expect(nonIssued.rejected).toBe('Unknown mailbox');
 
     env.MAX_MESSAGE_BYTES = '2';
     const oversized = createMessage('tmp@example.com', 'Subject: Big', 100);
@@ -44,5 +48,23 @@ describe('email handler', () => {
     delete oversized.rawSize;
     await handleEmail(oversized, env);
     expect(oversized.rejected).toBe('Message too large');
+  });
+
+  test('deletes stored objects when D1 insert fails', async () => {
+    const { env, state } = createTestEnv();
+    const prepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (!sql.includes('INSERT INTO messages')) return statement;
+      return {
+        bind: (...values: unknown[]) => {
+          statement.bind(...values);
+          return { run: async () => { throw new Error('D1 unavailable'); } };
+        },
+      } as unknown as D1PreparedStatement;
+    };
+
+    await expect(handleEmail(createMessage('tmp@example.com', 'Subject: Login 654321\n\nYour code is 654321'), env)).rejects.toThrow('D1 unavailable');
+    expect(state.objects.size).toBe(0);
   });
 });

@@ -10,7 +10,15 @@ Set Worker secret/env `API_TOKEN` to enable bearer auth for API routes:
 Authorization: Bearer <token>
 ```
 
-When `API_TOKEN` is unset, API stays open for same-origin personal UI use.
+API routes fail closed when `API_TOKEN` is unset. Local personal UI/dev mode must set `AUTH_DISABLED=true` explicitly.
+
+## Browser Boundary
+
+API responses intentionally omit CORS headers. Same-origin UI and server-side clients can call the API; cross-origin browser JavaScript is not part of the MVP boundary.
+
+## Rate Limit
+
+API routes use a best-effort, per-isolate, per-client in-memory token bucket keyed by Cloudflare `CF-Connecting-IP`; UI assets and `/health` are exempt. Configure `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`; rate-limited responses return `429 rate_limited` with `Retry-After`.
 
 ## Envelope
 

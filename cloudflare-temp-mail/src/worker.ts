@@ -1,7 +1,8 @@
 import { handleScheduled } from './handlers/cleanup-scheduler';
 import { handleEmail, type InboundEmailMessage } from './handlers/email-handler';
-import { isAuthorized } from './lib/auth-token';
+import { isApiRequest, isAuthorized } from './lib/auth-token';
 import { jsonError, jsonOk, textResponse } from './lib/http-response';
+import { checkRateLimit } from './lib/rate-limit';
 import { Router } from './lib/router';
 import { listDomains, listRandomDomains } from './routes/domains';
 import { generateEmail } from './routes/email-generate';
@@ -37,6 +38,10 @@ export default {
     const uiResponse = serveUi(request);
     if (uiResponse) return uiResponse;
     if (new URL(request.url).pathname === '/health') return jsonOk({ ok: true });
+    if (isApiRequest(request)) {
+      const rateLimit = checkRateLimit(request, env);
+      if (!rateLimit.allowed) return jsonError(429, 'rate_limited', 'Too many requests', { headers: { 'retry-after': String(rateLimit.retryAfterSeconds) } });
+    }
     return router.handle(request, env, ctx);
   },
 

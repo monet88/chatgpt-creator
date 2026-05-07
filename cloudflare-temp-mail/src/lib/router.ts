@@ -41,7 +41,13 @@ export class Router {
     for (const route of this.routes) {
       const match = url.pathname.match(route.pattern);
       if (!match || route.method !== request.method) continue;
-      const params = Object.fromEntries(route.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])]));
+      let params: Record<string, string>;
+      try {
+        params = Object.fromEntries(route.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])]));
+      } catch (error) {
+        if (error instanceof URIError) return jsonError(400, 'invalid_path_param', 'Path parameter is invalid');
+        throw error;
+      }
       return route.handler({ request, env, ctx, params });
     }
     return jsonError(404, 'not_found', 'Route not found');

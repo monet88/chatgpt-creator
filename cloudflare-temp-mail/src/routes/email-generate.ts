@@ -1,6 +1,7 @@
 import { jsonError, jsonOk } from '../lib/http-response';
 import { readJson } from '../lib/validation';
 import { listEnabledDomains } from '../services/domain-service';
+import { issueMailbox } from '../services/mailbox-service';
 import type { RouteContext } from '../lib/router';
 
 interface GenerateEmailBody {
@@ -18,5 +19,5 @@ export const generateEmail = async ({ request, env }: RouteContext) => {
   const domain = (body?.domain ?? domains[0] ?? '').toLowerCase();
   if (!domain || !domains.includes(domain)) return jsonError(400, 'invalid_domain', 'Domain is not enabled');
   const user = randomLocalPart();
-  return jsonOk({ email: `${user}@${domain}`, user, domain });
+  return jsonOk(await issueMailbox(env, domain, user));
 };
