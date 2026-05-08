@@ -101,23 +101,43 @@ export const uiHtml = `<!doctype html>
         <p>Sao chép địa chỉ email ở bên trái và dùng để đăng ký.<br>Email sẽ xuất hiện ngay tại đây.</p>
       </div>
 
-      <table id="message-table" class="message-table" style="display:none">
-        <thead><tr><th>TỪ</th><th>TIÊU ĐỀ</th><th>NGÀY</th><th>THAO TÁC</th></tr></thead>
-        <tbody id="inbox-body"></tbody>
-      </table>
+      <div id="message-pager" class="message-pager" style="display:none">
+        <label class="page-size-label">Show:
+          <select id="page-size">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+          emails per page
+        </label>
+        <span id="pager-status" class="pager-status">Hiển thị 0 email</span>
+        <div class="pager-buttons">
+          <button id="prev-page" class="pager-btn">Previous</button>
+          <span id="pager-page" class="pager-page">1</span>
+          <button id="next-page" class="pager-btn">Next</button>
+        </div>
+      </div>
+
+      <div id="message-table-wrap" class="message-table-wrap" style="display:none">
+        <table id="message-table" class="message-table">
+          <thead><tr><th>SENDER</th><th>SUBJECT</th><th>DATE</th><th>ACTIONS</th></tr></thead>
+          <tbody id="inbox-body"></tbody>
+        </table>
+      </div>
+
+      <section id="message-detail" class="message-detail" style="display:none" aria-live="polite">
+        <h3>Email Detail</h3>
+        <div class="detail-divider"></div>
+        <p><strong>Sender:</strong> <span id="detail-from"></span></p>
+        <p><strong>Subject:</strong> <span id="detail-subject"></span></p>
+        <p><strong>Date:</strong> <span id="detail-date"></span></p>
+        <p><strong>Body:</strong></p>
+        <div id="detail-body" class="detail-body"></div>
+      </section>
     </main>
   </div>
 
   <div id="inline-error" class="inline-error" role="alert"></div>
-
-  <dialog id="msg-modal">
-    <div class="modal-card">
-      <button id="close-modal" class="modal-close">✕</button>
-      <p id="modal-from" class="modal-meta"></p>
-      <h3 id="modal-subject" class="modal-subject"></h3>
-      <div id="modal-body" class="modal-body"></div>
-    </div>
-  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/assets/app.js"></script>

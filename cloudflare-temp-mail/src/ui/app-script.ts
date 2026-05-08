@@ -1,10 +1,19 @@
 export const uiScript = `
-const S = {email:'',user:'',domain:'',domains:[],messages:[],refreshTimer:null};
+const S = {email:'',user:'',domain:'',domains:[],messages:[],refreshTimer:null,page:1,pageSize:20,selectedId:'',openRequest:0};
 const $=id=>document.getElementById(id);
 const LS_KEY='tempmail_email';
 
 const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)};
 const showError=msg=>{const e=$('inline-error');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),3000)};
+const copyText=(text,done='Đã sao chép!')=>{
+  if(!text){toast('Không có gì để sao chép');return;}
+  navigator.clipboard.writeText(text).then(()=>toast(done)).catch(()=>{
+    const i=document.createElement('input');i.value=text;
+    document.body.appendChild(i);i.select();document.execCommand('copy');
+    document.body.removeChild(i);toast(done);
+  });
+};
+const fmtDate=d=>new Date(d).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
 const api=async(method,path,body=null)=>{
   const opts={method,headers:{'content-type':'application/json'}};
@@ -23,34 +32,49 @@ const setEmail=(email,user,domain)=>{
   const urlEl=$('url-email');
   if(email){
     const url=location.origin+'/#'+encodeURIComponent(email);
-    urlEl.textContent=url;urlEl.href=url;
+    urlEl.textContent=url;urlEl.href=url;urlEl.title='Bấm để sao chép link hộp thư';
     history.replaceState(null,'','/#'+encodeURIComponent(email));
     localStorage.setItem(LS_KEY,JSON.stringify({email,user,domain}));
   }else{
-    urlEl.textContent='';history.replaceState(null,'','/');
+    urlEl.textContent='';urlEl.removeAttribute('href');history.replaceState(null,'','/');
     localStorage.removeItem(LS_KEY);
   }
+};
+
+const clearMessageDetail=()=>{
+  S.selectedId='';
+  $('message-detail').style.display='none';
+  $('detail-body').replaceChildren();
 };
 
 const renderMessages=msgs=>{
   S.messages=msgs;
   $('inbox-count').textContent=msgs.length;
   $('unread-count').textContent=msgs.length;
-  const empty=$('empty-state'),table=$('message-table');
-  if(!msgs.length){empty.style.display='flex';table.style.display='none';return;}
-  empty.style.display='none';table.style.display='table';
-  const fmt=d=>new Date(d).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-  $('inbox-body').replaceChildren(...msgs.map(m=>{
+  const empty=$('empty-state'),tableWrap=$('message-table-wrap'),pager=$('message-pager');
+  if(!msgs.length){empty.style.display='flex';tableWrap.style.display='none';pager.style.display='none';clearMessageDetail();return;}
+  if(S.selectedId&&!msgs.some(m=>m.id===S.selectedId))clearMessageDetail();
+  empty.style.display='none';tableWrap.style.display='block';pager.style.display='flex';
+  const totalPages=Math.max(1,Math.ceil(msgs.length/S.pageSize));
+  if(S.page>totalPages)S.page=totalPages;
+  const start=(S.page-1)*S.pageSize;
+  const pageItems=msgs.slice(start,start+S.pageSize);
+  $('pager-status').textContent='Hiển thị '+(start+1)+'-'+(start+pageItems.length)+' / '+msgs.length+' email';
+  $('pager-page').textContent=S.page;
+  $('prev-page').disabled=S.page<=1;
+  $('next-page').disabled=S.page>=totalPages;
+  $('inbox-body').replaceChildren(...pageItems.map(m=>{
     const tr=document.createElement('tr');
-    tr.innerHTML='<td class="from-cell"></td><td class="subject-cell"></td><td class="date-cell"></td><td></td>';
+    if(m.id===S.selectedId)tr.className='selected';
+    tr.innerHTML='<td class="from-cell"></td><td class="subject-cell"></td><td class="date-cell"></td><td class="actions-cell"></td>';
     tr.children[0].textContent=m.from;
     tr.children[1].textContent=m.subject||'(không có tiêu đề)';
-    tr.children[2].textContent=fmt(m.receivedAt);
+    tr.children[2].textContent=fmtDate(m.receivedAt);
     const read=document.createElement('button');
-    read.className='btn-read';read.textContent='Đọc';
+    read.className='btn-read';read.textContent='View';
     read.onclick=()=>openMessage(m.id);
     const del=document.createElement('button');
-    del.className='btn-del';del.textContent='✕';
+    del.className='btn-del';del.textContent='Delete';
     del.onclick=()=>deleteOne(m.id);
     tr.children[3].append(read,del);
     return tr;
@@ -77,32 +101,40 @@ const loadMessages=async()=>{
 };
 
 const openMessage=async id=>{
+  const requestId=++S.openRequest;
+  const mailboxKey=S.domain+'/'+S.user;
   try{
     const d=await api('GET','/email/'+S.domain+'/'+S.user+'/messages/'+id);
-    $('modal-from').textContent='Từ: '+(d.from||'');
-    $('modal-subject').textContent=d.subject||'(không có tiêu đề)';
-    const bodyEl=$('modal-body');
+    if(requestId!==S.openRequest||mailboxKey!==S.domain+'/'+S.user)return;
+    S.selectedId=id;
+    $('detail-from').textContent=(d.from||'');
+    $('detail-subject').textContent=d.subject||'(không có tiêu đề)';
+    $('detail-date').textContent=fmtDate(d.receivedAt||Date.now());
+    const bodyEl=$('detail-body');
     if(d.html){
       const iframe=document.createElement('iframe');
-      iframe.className='modal-iframe';
+      iframe.className='detail-iframe';
       iframe.srcdoc=d.html;
-      iframe.setAttribute('sandbox','allow-popups');
+      iframe.setAttribute('sandbox','');
       bodyEl.replaceChildren(iframe);
       bodyEl.dataset.type='html';
     }else{
       const pre=document.createElement('pre');
-      pre.className='modal-text';
+      pre.className='detail-text';
       pre.textContent=d.text||'(không có nội dung)';
       bodyEl.replaceChildren(pre);
       bodyEl.dataset.type='text';
     }
-    $('msg-modal').showModal();
+    $('message-detail').style.display='block';
+    renderMessages(S.messages);
+    $('message-detail').scrollIntoView({behavior:'smooth',block:'nearest'});
   }catch(e){showError(e.message)}
 };
 
 const deleteOne=async id=>{
   try{
     await api('DELETE','/email/'+S.domain+'/'+S.user+'/messages/'+id);
+    if(S.selectedId===id)clearMessageDetail();
     await loadMessages();toast('Đã xóa');
   }catch(e){showError(e.message)}
 };
@@ -114,7 +146,7 @@ const generate=async()=>{
   try{
     const d=await api('POST','/email/generate',user?{domain,user}:{domain});
     setEmail(d.email,d.user,d.domain);
-    S.messages=[];renderMessages([]);
+    S.messages=[];S.page=1;renderMessages([]);
     toast('Đã tạo: '+d.email);
   }catch(e){showError(e.message)}
 };
@@ -136,7 +168,6 @@ const init=async()=>{
       const o=document.createElement('option');
       o.value=dom;o.textContent=dom;return o;
     }));
-    // Restore from URL hash first, then localStorage
     const hashEmail=location.hash?decodeURIComponent(location.hash.slice(1)):'';
     const saved=localStorage.getItem(LS_KEY);
     let restored=null;
@@ -157,14 +188,11 @@ const init=async()=>{
 };
 
 $('generate-btn').onclick=generate;
-$('copy-btn').onclick=()=>{
-  if(!S.email){toast('Chưa có địa chỉ email');return;}
-  navigator.clipboard.writeText(S.email).then(()=>toast('Đã sao chép!')).catch(()=>{
-    const i=document.createElement('input');i.value=S.email;
-    document.body.appendChild(i);i.select();document.execCommand('copy');
-    document.body.removeChild(i);toast('Đã sao chép!');
-  });
-};
+$('copy-btn').onclick=()=>copyText(S.email,'Đã sao chép địa chỉ!');
+$('url-email').onclick=e=>{e.preventDefault();copyText($('url-email').textContent,'Đã sao chép link hộp thư!')};
+$('page-size').onchange=e=>{S.pageSize=Number(e.target.value);S.page=1;renderMessages(S.messages)};
+$('prev-page').onclick=()=>{S.page=Math.max(1,S.page-1);renderMessages(S.messages)};
+$('next-page').onclick=()=>{S.page+=1;renderMessages(S.messages)};
 $('delete-all-btn').onclick=async()=>{
   if(!S.email||!confirm('Xóa tất cả email trong hộp thư này?'))return;
   try{
@@ -174,12 +202,10 @@ $('delete-all-btn').onclick=async()=>{
   }catch(e){showError(e.message)}
 };
 $('auto-refresh-toggle').onchange=()=>$('auto-refresh-toggle').checked?startRefresh():stopRefresh();
-$('close-modal').onclick=()=>$('msg-modal').close();
-$('msg-modal').onclick=e=>{if(e.target===$('msg-modal'))$('msg-modal').close()};
 $('copy-otp-btn').onclick=()=>{
   const code=$('otp-code').textContent;
   if(!code||code==='—')return;
-  navigator.clipboard.writeText(code).then(()=>toast('Đã sao chép mã OTP!')).catch(()=>toast(code));
+  copyText(code,'Đã sao chép mã OTP!');
 };
 
 init();
