@@ -94,6 +94,7 @@ button{flex:1;padding:8px;border-radius:5px;border:none;font-size:12px;font-weig
 </section>
 </main>
 <script>
+const SESSION_TOKEN = '__SESSION_TOKEN__';
 let es = null;
 
 function toggleCodex(cb) {
@@ -149,7 +150,7 @@ async function startJob() {
 
   const res = await fetch('/api/start', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': SESSION_TOKEN },
     body: JSON.stringify(cfg),
   });
   const data = await res.json();
@@ -163,7 +164,7 @@ async function startJob() {
 }
 
 async function stopJob() {
-  await fetch('/api/stop', { method: 'POST' });
+  await fetch('/api/stop', { method: 'POST', headers: { 'X-CSRF-Token': SESSION_TOKEN } });
 }
 
 function connectSSE() {
