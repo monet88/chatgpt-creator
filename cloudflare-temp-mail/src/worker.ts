@@ -12,6 +12,8 @@ import { getLatestOtp } from './routes/otp';
 import { uiHtml } from './ui/index-html';
 import { uiScript } from './ui/app-script';
 import { uiStyles } from './ui/styles-css';
+import { domainHtml } from './ui/domain-html';
+import { apiHtml } from './ui/api-html';
 import type { Env } from './types';
 
 const router = new Router()
@@ -27,6 +29,8 @@ const router = new Router()
 const serveUi = (request: Request) => {
   const path = new URL(request.url).pathname;
   if (path === '/') return textResponse(uiHtml, 'text/html; charset=utf-8');
+  if (path === '/domain') return textResponse(domainHtml, 'text/html; charset=utf-8');
+  if (path === '/api') return textResponse(apiHtml, 'text/html; charset=utf-8');
   if (path === '/assets/app.js') return textResponse(uiScript, 'text/javascript; charset=utf-8');
   if (path === '/assets/styles.css') return textResponse(uiStyles, 'text/css; charset=utf-8');
   return null;

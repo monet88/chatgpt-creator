@@ -11,6 +11,7 @@ import (
 	"github.com/monet88/chatgpt-creator/internal/email"
 	"github.com/monet88/chatgpt-creator/internal/phone"
 	proxypkg "github.com/monet88/chatgpt-creator/internal/proxy"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 type BatchOptions struct {
@@ -63,7 +64,10 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 		password = deps.generatePassword()
 	}
 
-	firstName, lastName := deps.randomName()
+	firstName, lastName, parsed := util.ParseNameFromEmail(emailAddr)
+	if !parsed {
+		firstName, lastName = deps.randomName()
+	}
 	birthdate := deps.randomBirthdate()
 
 	err = client.RunRegisterWithContext(ctx, emailAddr, password, firstName+" "+lastName, birthdate)

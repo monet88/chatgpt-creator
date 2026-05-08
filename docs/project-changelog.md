@@ -1,5 +1,33 @@
 # Project Changelog
 
+## 2026-05-08 — Cloudflare Temp Mail Public Launch & UI Overhaul
+
+### Added
+- Public deployment at `https://mail.monet.uno` (Cloudflare custom domain).
+- `src/lib/name-generator.ts`: realistic `firstname.lastname.hex` email local-part generator.
+- `src/ui/domain-html.ts`: step-by-step domain setup guide page at `/domain`.
+- `src/ui/api-html.ts`: full API reference docs at `/api` with tabs, parameter tables, curl examples, error codes.
+- `internal/util/names.go`: `ParseNameFromEmail` extracts first/last name from `firstname.lastname.hex@domain` format.
+- `.dev.vars`: local API token file (gitignored).
+
+### Changed
+- `AUTH_DISABLED=true` in `wrangler.toml` — API now fully public, protected only by rate limiting.
+- `wrangler.toml`: `ENABLED_DOMAINS=monet.uno`, real D1 `database_id` wired.
+- UI completely rewritten: dark theme, Vietnamese, sidebar layout, auto-refresh (5 s), localStorage email persistence, shareable URL hash (`/#email@domain`), OTP/2FA panel with copy button.
+- Worker now serves `/domain` and `/api` routes.
+- `internal/register/batch.go`: uses `ParseNameFromEmail` for consistent name–email pairing; falls back to `gofakeit` for non-matching formats.
+- Email generate route uses `randomLocalPart` from `name-generator.ts` instead of `tmp-hex` prefix.
+
+### Infrastructure
+- D1 database `cloudflare-temp-mail` created in APAC region.
+- R2 bucket `cloudflare-temp-mail` created.
+- Cloudflare Email Routing catch-all rule on `monet.uno` → Worker.
+- D1 migrations applied; domain seed updated from `example.com` to `monet.uno`.
+
+### Validation
+- `npx wrangler deploy` succeeded.
+- End-to-end: email generated, test email received and visible in inbox via API.
+
 ## 2026-05-07 — Cloudflare Temp Mail Hardening
 
 ### Changed

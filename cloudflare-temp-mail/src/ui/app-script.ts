@@ -1,112 +1,172 @@
-export const uiScript = `const state = { domains: [], email: '', domain: '', user: '', messages: [], otp: null };
-const $ = (id) => document.getElementById(id);
-let lastReadButton = null;
-const toast = (message) => {
-  const node = $('toast');
-  node.textContent = message;
-  node.classList.add('show');
-  setTimeout(() => node.classList.remove('show'), 1800);
+export const uiScript = `
+const S = {email:'',user:'',domain:'',domains:[],messages:[],refreshTimer:null};
+const $=id=>document.getElementById(id);
+const LS_KEY='tempmail_email';
+
+const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)};
+const showError=msg=>{const e=$('inline-error');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),3000)};
+
+const api=async(method,path,body=null)=>{
+  const opts={method,headers:{'content-type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch('/api/v1'+path,opts);
+  const d=await r.json();
+  if(!d.success)throw new Error(d.error?.message||'Lỗi không xác định');
+  return d.data;
 };
-const showError = (message) => {
-  $('inline-error').textContent = message;
-  toast(message);
-};
-const clearError = () => { $('inline-error').textContent = ''; };
-const setStatus = (status) => { $('status-badge').textContent = status; };
-const api = async (path, options = {}) => {
-  const response = await fetch('/api/v1' + path, { headers: { 'content-type': 'application/json' }, ...options });
-  const body = await response.json();
-  if (!body.success) throw new Error(body.error?.message || 'Request failed');
-  return body.data;
-};
-const splitEmail = (email) => {
-  const [user, domain] = email.split('@');
-  return { user, domain };
-};
-const renderMessages = () => {
-  $('message-count').textContent = state.messages.length + ' messages';
-  $('inbox-body').replaceChildren(...(state.messages.length ? state.messages.map((message) => {
-    const row = document.createElement('tr');
-    const date = new Date(message.receivedAt).toLocaleString();
-    row.innerHTML = '<td></td><td></td><td></td><td></td>';
-    row.children[0].textContent = message.from;
-    row.children[1].textContent = message.subject || '(no subject)';
-    row.children[2].textContent = date;
-    const read = document.createElement('button');
-    read.type = 'button';
-    read.textContent = 'Read';
-    read.addEventListener('click', () => readMessage(message.id, read));
-    row.children[3].append(read);
-    return row;
-  }) : [Object.assign(document.createElement('tr'), { innerHTML: '<td colspan="4">Inbox empty. Hit refresh after email arrives.</td>' })]));
-};
-const refreshOtp = async () => {
-  if (!state.email) return;
-  const data = await api('/email/' + state.domain + '/' + state.user + '/otp');
-  state.otp = data.otp;
-  $('copy-otp').textContent = data.otp || 'No OTP yet';
-  setStatus(data.otp ? 'RECEIVED' : 'WAITING');
-};
-const refreshInbox = async () => {
-  if (!state.email) return toast('Generate address first');
-  setStatus('WAITING');
-  const data = await api('/email/' + state.domain + '/' + state.user + '/messages');
-  state.messages = data.messages;
-  renderMessages();
-  await refreshOtp();
-};
-const readMessage = async (id, trigger) => {
-  try {
-    clearError();
-    lastReadButton = trigger;
-    const message = await api('/email/' + state.domain + '/' + state.user + '/messages/' + id);
-    $('modal-from').textContent = message.from + ' → ' + message.to;
-    $('modal-subject').textContent = message.subject || '(no subject)';
-    $('modal-body').textContent = message.body || message.html || '(empty message)';
-    $('message-modal').showModal();
-  } catch (error) {
-    showError(error.message);
+
+const setEmail=(email,user,domain)=>{
+  S.email=email;S.user=user;S.domain=domain;
+  $('current-email').textContent=email||'Chưa có địa chỉ';
+  $('email-badge').textContent=email||'';
+  $('username-input').value=user||'';
+  const urlEl=$('url-email');
+  if(email){
+    const url=location.origin+'/#'+encodeURIComponent(email);
+    urlEl.textContent=url;urlEl.href=url;
+    history.replaceState(null,'','/#'+encodeURIComponent(email));
+    localStorage.setItem(LS_KEY,JSON.stringify({email,user,domain}));
+  }else{
+    urlEl.textContent='';history.replaceState(null,'','/');
+    localStorage.removeItem(LS_KEY);
   }
 };
-const generateEmail = async () => {
-  const domain = $('domain-select').value;
-  const data = await api('/email/generate', { method: 'POST', body: JSON.stringify({ domain }) });
-  Object.assign(state, { email: data.email, ...splitEmail(data.email), messages: [], otp: null });
-  $('email-output').value = data.email;
-  $('copy-otp').textContent = 'No OTP yet';
-  renderMessages();
-  setStatus('READY');
-  toast('Address generated');
+
+const renderMessages=msgs=>{
+  S.messages=msgs;
+  $('inbox-count').textContent=msgs.length;
+  $('unread-count').textContent=msgs.length;
+  const empty=$('empty-state'),table=$('message-table');
+  if(!msgs.length){empty.style.display='flex';table.style.display='none';return;}
+  empty.style.display='none';table.style.display='table';
+  const fmt=d=>new Date(d).toLocaleString('vi-VN',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  $('inbox-body').replaceChildren(...msgs.map(m=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td class="from-cell"></td><td class="subject-cell"></td><td class="date-cell"></td><td></td>';
+    tr.children[0].textContent=m.from;
+    tr.children[1].textContent=m.subject||'(không có tiêu đề)';
+    tr.children[2].textContent=fmt(m.receivedAt);
+    const read=document.createElement('button');
+    read.className='btn-read';read.textContent='Đọc';
+    read.onclick=()=>openMessage(m.id);
+    const del=document.createElement('button');
+    del.className='btn-del';del.textContent='✕';
+    del.onclick=()=>deleteOne(m.id);
+    tr.children[3].append(read,del);
+    return tr;
+  }));
 };
-const deleteMailbox = async () => {
-  if (!state.email) return;
-  const data = await api('/email/' + state.domain + '/' + state.user, { method: 'DELETE' });
-  state.messages = [];
-  state.otp = null;
-  renderMessages();
-  $('copy-otp').textContent = 'No OTP yet';
-  setStatus('READY');
-  toast('Deleted ' + data.deleted + ' messages');
+
+const loadOtp=async()=>{
+  if(!S.user||!S.domain)return;
+  try{
+    const d=await api('GET','/email/'+S.domain+'/'+S.user+'/otp');
+    const code=d?.otp||null;
+    $('otp-section').style.display=code?'flex':'none';
+    if(code)$('otp-code').textContent=code;
+  }catch{}
 };
-const copyText = async (value, label) => {
-  if (!value) return;
-  try {
-    await navigator.clipboard.writeText(value);
-    toast(label + ' copied');
-  } catch {
-    showError('Copy blocked. Select text and copy manually.');
-  }
+
+const loadMessages=async()=>{
+  if(!S.user||!S.domain)return;
+  try{
+    const d=await api('GET','/email/'+S.domain+'/'+S.user+'/messages');
+    renderMessages(d.messages||[]);
+    await loadOtp();
+  }catch(e){showError(e.message)}
 };
-const init = async () => {
-  const { domains } = await api('/domains');
-  state.domains = domains;
-  $('domain-select').replaceChildren(...domains.map((domain) => Object.assign(document.createElement('option'), { value: domain, textContent: domain })));
-  $('generate-email').addEventListener('click', generateEmail);
-  $('refresh-inbox').addEventListener('click', refreshInbox);
-  $('delete-mailbox').addEventListener('click', deleteMailbox);
-  $('copy-email').addEventListener('click', () => copyText(state.email, 'Email'));
-  $('copy-otp').addEventListener('click', () => copyText(state.otp, 'OTP'));
-  $('close-modal').addEventListener('click', () => $('message-modal').close());
-  $('message-modal').addEventListener('close', () => lastReadButton?.focus());
+
+const openMessage=async id=>{
+  try{
+    const d=await api('GET','/email/'+S.domain+'/'+S.user+'/messages/'+id);
+    $('modal-from').textContent='Từ: '+(d.from||'');
+    $('modal-subject').textContent=d.subject||'(không có tiêu đề)';
+    $('modal-body').textContent=d.text||d.html||'(không có nội dung)';
+    $('msg-modal').showModal();
+  }catch(e){showError(e.message)}
 };
-init().catch((error) => toast(error.message));`;
+
+const deleteOne=async id=>{
+  try{
+    await api('DELETE','/email/'+S.domain+'/'+S.user+'/messages/'+id);
+    await loadMessages();toast('Đã xóa');
+  }catch(e){showError(e.message)}
+};
+
+const generate=async()=>{
+  const user=$('username-input').value.trim();
+  const domain=$('domain-select').value;
+  if(!domain){showError('Chưa có domain');return;}
+  try{
+    const d=await api('POST','/email/generate',user?{domain,user}:{domain});
+    setEmail(d.email,d.user,d.domain);
+    S.messages=[];renderMessages([]);
+    toast('Đã tạo: '+d.email);
+  }catch(e){showError(e.message)}
+};
+
+const startRefresh=()=>{
+  stopRefresh();
+  if($('auto-refresh-toggle').checked)S.refreshTimer=setInterval(loadMessages,5000);
+};
+const stopRefresh=()=>{if(S.refreshTimer){clearInterval(S.refreshTimer);S.refreshTimer=null;}};
+
+const init=async()=>{
+  try{
+    const d=await api('GET','/domains');
+    const domains=d.domains||[];
+    S.domains=domains;
+    $('domain-count').textContent=domains.length;
+    const sel=$('domain-select');
+    sel.replaceChildren(...domains.map(dom=>{
+      const o=document.createElement('option');
+      o.value=dom;o.textContent=dom;return o;
+    }));
+    // Restore from URL hash first, then localStorage
+    const hashEmail=location.hash?decodeURIComponent(location.hash.slice(1)):'';
+    const saved=localStorage.getItem(LS_KEY);
+    let restored=null;
+    if(hashEmail&&hashEmail.includes('@')){
+      const[user,domain]=hashEmail.split('@');
+      if(domains.includes(domain))restored={email:hashEmail,user,domain};
+    }
+    if(!restored&&saved){
+      try{const p=JSON.parse(saved);if(domains.includes(p.domain))restored=p;}catch{}
+    }
+    if(restored){
+      setEmail(restored.email,restored.user,restored.domain);
+      sel.value=restored.domain;
+      await loadMessages();
+    }
+    startRefresh();
+  }catch(e){showError('Không thể tải danh sách domain: '+e.message)}
+};
+
+$('generate-btn').onclick=generate;
+$('copy-btn').onclick=()=>{
+  if(!S.email){toast('Chưa có địa chỉ email');return;}
+  navigator.clipboard.writeText(S.email).then(()=>toast('Đã sao chép!')).catch(()=>{
+    const i=document.createElement('input');i.value=S.email;
+    document.body.appendChild(i);i.select();document.execCommand('copy');
+    document.body.removeChild(i);toast('Đã sao chép!');
+  });
+};
+$('delete-all-btn').onclick=async()=>{
+  if(!S.email||!confirm('Xóa tất cả email trong hộp thư này?'))return;
+  try{
+    await api('DELETE','/email/'+S.domain+'/'+S.user);
+    renderMessages([]);setEmail('','','');
+    localStorage.removeItem(LS_KEY);toast('Đã xóa hộp thư');
+  }catch(e){showError(e.message)}
+};
+$('auto-refresh-toggle').onchange=()=>$('auto-refresh-toggle').checked?startRefresh():stopRefresh();
+$('close-modal').onclick=()=>$('msg-modal').close();
+$('msg-modal').onclick=e=>{if(e.target===$('msg-modal'))$('msg-modal').close()};
+$('copy-otp-btn').onclick=()=>{
+  const code=$('otp-code').textContent;
+  if(!code||code==='—')return;
+  navigator.clipboard.writeText(code).then(()=>toast('Đã sao chép mã OTP!')).catch(()=>toast(code));
+};
+
+init();
+`;

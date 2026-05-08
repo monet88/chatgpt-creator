@@ -1,6 +1,6 @@
 # Codebase Summary
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-08_
 
 ## Repository Snapshot
 
@@ -21,11 +21,15 @@ _Last updated: 2026-05-07_
 
 ### 2) `cloudflare-temp-mail` (TypeScript Worker)
 
-- Purpose: standalone temp-mail API/UI service, intended to be consumed over HTTP.
+- Purpose: standalone temp-mail API/UI public service at `https://mail.monet.uno`.
 - Main path: `cloudflare-temp-mail/src/worker.ts`.
 - API prefix: `/api/v1` (`cloudflare-temp-mail/src/config/app-config.ts`).
+- Auth: public (`AUTH_DISABLED=true`), rate-limited at 120 req/60 s per IP.
+- UI pages: `/` (main inbox), `/domain` (setup guide), `/api` (API docs).
+- UI assets: `src/ui/` — dark-theme Vietnamese SPA with auto-refresh, localStorage persistence, OTP display, shareable URL hash.
+- Name generation: `src/lib/name-generator.ts` produces `firstname.lastname.hex` local parts.
 - Data/storage: D1 metadata + R2 payload objects.
-- Inbound handling: `email()` handler for Cloudflare Email Routing.
+- Inbound handling: `email()` handler for Cloudflare Email Routing catch-all on `monet.uno`.
 - Retention: scheduled cleanup via cron trigger (`*/30 * * * *` in `wrangler.toml`).
 
 ## High-Level Execution Paths
@@ -41,7 +45,7 @@ _Last updated: 2026-05-07_
 
 ### Worker path (Cloudflare)
 
-1. Fetch handler checks optional bearer auth (`API_TOKEN`) and serves UI assets/health.
+1. Fetch handler checks auth (disabled for public deployment) and serves UI pages/assets/health.
 2. API routes are matched under `/api/v1` through custom router.
 3. Route handlers validate input/domain and use D1/R2-backed services.
 4. `email()` persists inbound message data for mailbox/OTP retrieval.
