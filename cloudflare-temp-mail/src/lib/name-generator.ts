@@ -23,7 +23,7 @@ const LAST_NAMES = [
 const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 const randomSuffix = () => {
-  const bytes = crypto.getRandomValues(new Uint8Array(2));
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 };
 

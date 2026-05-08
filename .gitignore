@@ -27,7 +27,7 @@ cloudflare-temp-mail/.wrangler/
 cloudflare-temp-mail/.dev.vars
 cloudflare-temp-mail/test-results/
 server.log
-register
+/register
 
 # Local proxy credentials
 /docs/proxy/

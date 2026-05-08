@@ -27,12 +27,12 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 			run := func(ctx context.Context, cfg web.JobConfig, w io.Writer) (web.JobResult, error) {
 				var otpProvider email.OTPProvider
 				if cfg.CloudflareMailURL != "" {
-					otpProvider = email.NewCloudflareTempMailProvider(cfg.CloudflareMailURL)
+					otpProvider = email.NewCloudflareTempMailProvider(cfg.CloudflareMailURL, cfg.CloudflareMailToken)
 				}
 
 				var createTempEmail func(string) (string, error)
 				if cfg.CloudflareMailURL != "" {
-					createTempEmail = email.CreateCloudflareTempEmail(cfg.CloudflareMailURL)
+					createTempEmail = email.CreateCloudflareTempEmail(cfg.CloudflareMailURL, cfg.CloudflareMailToken)
 				}
 
 				var viOTPClient *phone.ViOTPClient
@@ -45,12 +45,12 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 					CreateTempEmail: createTempEmail,
 				}
 				if viOTPClient != nil {
-					providers.PhoneProvider  = viOTPClient
+					providers.PhoneProvider = viOTPClient
 					providers.ViOTPServiceID = cfg.ViOTPServiceID
 				}
 				if cfg.CodexEnabled && cfg.CodexOutput != "" {
-					providers.CodexEnabled   = true
-					providers.CodexOutput    = cfg.CodexOutput
+					providers.CodexEnabled = true
+					providers.CodexOutput = cfg.CodexOutput
 					providers.PanelOutputDir = cfg.PanelOutputDir
 				}
 

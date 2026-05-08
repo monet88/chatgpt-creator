@@ -9,23 +9,24 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Proxy           string `json:"proxy"`
-	ProxyList       string `json:"proxy_list"`
-	ProxyCooldown   int    `json:"proxy_cooldown"`
-	OutputFile      string `json:"output_file"`
-	DefaultPassword string `json:"default_password"`
-	DefaultDomain   string `json:"default_domain"`
-	Pacing          string `json:"pacing"`
-	ViOTPToken      string `json:"viotp_token"`
-	ViOTPServiceID  int    `json:"viotp_service_id"`
-	IMAPHost        string `json:"imap_host"`
-	IMAPPort        int    `json:"imap_port"`
-	IMAPUser        string `json:"imap_user"`
-	IMAPPassword    string `json:"imap_password"`
-	IMAPUseTLS      bool   `json:"imap_use_tls"`
-	CodexEnabled       bool   `json:"codex_enabled"`
-	CodexOutput        string `json:"codex_output"`
-	CloudflareMailURL  string `json:"cloudflare_mail_url"`
+	Proxy               string `json:"proxy"`
+	ProxyList           string `json:"proxy_list"`
+	ProxyCooldown       int    `json:"proxy_cooldown"`
+	OutputFile          string `json:"output_file"`
+	DefaultPassword     string `json:"default_password"`
+	DefaultDomain       string `json:"default_domain"`
+	Pacing              string `json:"pacing"`
+	ViOTPToken          string `json:"viotp_token"`
+	ViOTPServiceID      int    `json:"viotp_service_id"`
+	IMAPHost            string `json:"imap_host"`
+	IMAPPort            int    `json:"imap_port"`
+	IMAPUser            string `json:"imap_user"`
+	IMAPPassword        string `json:"imap_password"`
+	IMAPUseTLS          bool   `json:"imap_use_tls"`
+	CodexEnabled        bool   `json:"codex_enabled"`
+	CodexOutput         string `json:"codex_output"`
+	CloudflareMailURL   string `json:"cloudflare_mail_url"`
+	CloudflareMailToken string `json:"cloudflare_mail_token"`
 }
 
 const (
@@ -116,6 +117,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("CLOUDFLARE_MAIL_URL"); v != "" {
 		cfg.CloudflareMailURL = v
+	}
+	if v := os.Getenv("CLOUDFLARE_MAIL_TOKEN"); v != "" {
+		cfg.CloudflareMailToken = v
 	}
 
 	return cfg, nil

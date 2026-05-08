@@ -14,7 +14,7 @@ h1{font-size:16px;font-weight:600;letter-spacing:.3px}
 main{flex:1;display:flex;min-height:0}
 .sidebar{width:276px;flex-shrink:0;background:#161616;border-right:1px solid #2a2a2a;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
 .field label{display:block;font-size:11px;color:#777;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
-input[type=text],input[type=number],select{width:100%;background:#0d0d0d;border:1px solid #2e2e2e;color:#e5e5e5;padding:6px 9px;border-radius:5px;font-size:12px;outline:none;transition:border-color .15s}
+input[type=text],input[type=password],input[type=number],select{width:100%;background:#0d0d0d;border:1px solid #2e2e2e;color:#e5e5e5;padding:6px 9px;border-radius:5px;font-size:12px;outline:none;transition:border-color .15s}
 input:focus,select:focus{border-color:#444}
 .row{display:flex;gap:8px}
 .row .field{flex:1}
@@ -57,6 +57,7 @@ button{flex:1;padding:8px;border-radius:5px;border:none;font-size:12px;font-weig
   <div class="field"><label>Output file</label><input id="output" type="text" value="accounts.txt"></div>
   <div class="field"><label>Domain</label><input id="domain" type="text" placeholder="monet.uno"></div>
   <div class="field"><label>Cloudflare Mail URL</label><input id="cfurl" type="text" placeholder="https://mail.monet.uno"></div>
+  <div class="field"><label>Cloudflare Mail Token</label><input id="cf-token" type="password" placeholder="Bearer API token"></div>
   <div class="field"><label>Proxy (optional)</label><input id="proxy" type="text" placeholder="http://host:port"></div>
   <div class="check-row">
     <input type="checkbox" id="codex" onchange="toggleCodex(this)">
@@ -131,6 +132,7 @@ async function startJob() {
     output:          document.getElementById('output').value,
     domain:          document.getElementById('domain').value,
     cloudflareMailUrl: document.getElementById('cfurl').value,
+    cloudflareMailToken: document.getElementById('cf-token').value,
     proxy:           document.getElementById('proxy').value,
     codexEnabled:    document.getElementById('codex').checked,
     codexOutput:     document.getElementById('codex-out').value,
@@ -153,6 +155,7 @@ async function startJob() {
   const data = await res.json();
   if (!res.ok || data.error) {
     appendLog('Error: ' + (data.error || res.statusText), 'err');
+    if (es) { es.close(); es = null; }
     setRunning(false);
     return;
   }

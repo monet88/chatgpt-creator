@@ -80,8 +80,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 		codexEnabled   bool
 		codexOutput    string
 		panelOutputDir string
-		// Cloudflare temp-mail flag
-		cloudflareMailURL string
+		// Cloudflare temp-mail flags
+		cloudflareMailURL   string
+		cloudflareMailToken string
 	)
 
 	cmd := &cobra.Command{
@@ -143,7 +144,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				cmd.Flags().Changed("viotp-service-id") ||
 				cmd.Flags().Changed("codex") ||
 				cmd.Flags().Changed("codex-output") ||
-				cmd.Flags().Changed("cloudflare-mail-url")
+				cmd.Flags().Changed("cloudflare-mail-url") ||
+				cmd.Flags().Changed("cloudflare-mail-token")
 			if interactive || !hasActionableFlags {
 				return runInteractive(cmd.Context(), in, out, errOut, cfg, effectiveOutput)
 			}
@@ -239,9 +241,14 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			if cmd.Flags().Changed("cloudflare-mail-url") {
 				effectiveCloudflareMailURL = cloudflareMailURL
 			}
+			effectiveCloudflareMailToken := cfg.CloudflareMailToken
+			if cmd.Flags().Changed("cloudflare-mail-token") {
+				effectiveCloudflareMailToken = cloudflareMailToken
+			}
 
 			var otpProvider email.OTPProvider
-			if effectiveIMAPHost != "" && effectiveIMAPUser != "" && effectiveIMAPPassword != "" {
+			usingIMAPOTP := effectiveIMAPHost != "" && effectiveIMAPUser != "" && effectiveIMAPPassword != ""
+			if usingIMAPOTP {
 				pooler, imapErr := email.NewIMAPPooler(email.IMAPConfig{
 					Host:     effectiveIMAPHost,
 					Port:     effectiveIMAPPort,
@@ -255,12 +262,12 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				defer pooler.Close()
 				otpProvider = pooler
 			} else if effectiveCloudflareMailURL != "" {
-				otpProvider = email.NewCloudflareTempMailProvider(effectiveCloudflareMailURL)
+				otpProvider = email.NewCloudflareTempMailProvider(effectiveCloudflareMailURL, effectiveCloudflareMailToken)
 			}
 
 			var cloudflareCreateEmail func(string) (string, error)
-			if effectiveCloudflareMailURL != "" {
-				cloudflareCreateEmail = email.CreateCloudflareTempEmail(effectiveCloudflareMailURL)
+			if !usingIMAPOTP && effectiveCloudflareMailURL != "" {
+				cloudflareCreateEmail = email.CreateCloudflareTempEmail(effectiveCloudflareMailURL, effectiveCloudflareMailToken)
 			}
 
 			effectivePacing := cfg.Pacing
@@ -283,12 +290,12 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				providers.ProxyPool = proxyPool
 			}
 			if viOTPClient != nil {
-				providers.PhoneProvider  = viOTPClient
+				providers.PhoneProvider = viOTPClient
 				providers.ViOTPServiceID = effectiveViOTPServiceID
 			}
 			if effectiveCodexEnabled {
-				providers.CodexEnabled   = true
-				providers.CodexOutput    = effectiveCodexOutput
+				providers.CodexEnabled = true
+				providers.CodexOutput = effectiveCodexOutput
 				providers.PanelOutputDir = panelOutputDir
 			}
 
@@ -347,8 +354,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
 	cmd.Flags().StringVar(&codexOutput, "codex-output", config.DefaultCodexOutput, "Unsupported in safe mode; Codex token output path")
 	cmd.Flags().StringVar(&panelOutputDir, "panel-output", "", "Directory for per-account panel JSON files (codex-{email}-{plan}.json); requires --codex")
-	// Cloudflare temp-mail flag
+	// Cloudflare temp-mail flags
 	cmd.Flags().StringVar(&cloudflareMailURL, "cloudflare-mail-url", "", "Base URL of Cloudflare temp-mail Worker (e.g. https://mail.monet.uno)")
+	cmd.Flags().StringVar(&cloudflareMailToken, "cloudflare-mail-token", "", "Bearer token for Cloudflare temp-mail API")
 
 	cmd.AddCommand(newServeCommand(out, errOut))
 

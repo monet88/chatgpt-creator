@@ -16,19 +16,20 @@ var uiHTML []byte
 
 // JobConfig holds the registration parameters submitted from the web UI.
 type JobConfig struct {
-	Total             int    `json:"total"`
-	Workers           int    `json:"workers"`
-	Output            string `json:"output"`
-	Domain            string `json:"domain"`
-	Password          string `json:"password"`
-	Proxy             string `json:"proxy"`
-	Pacing            string `json:"pacing"`
-	CloudflareMailURL string `json:"cloudflareMailUrl"`
-	ViOTPToken        string `json:"viOTPToken"`
-	ViOTPServiceID    int    `json:"viOTPServiceID"`
-	CodexEnabled      bool   `json:"codexEnabled"`
-	CodexOutput       string `json:"codexOutput"`
-	PanelOutputDir    string `json:"panelOutputDir"`
+	Total               int    `json:"total"`
+	Workers             int    `json:"workers"`
+	Output              string `json:"output"`
+	Domain              string `json:"domain"`
+	Password            string `json:"password"`
+	Proxy               string `json:"proxy"`
+	Pacing              string `json:"pacing"`
+	CloudflareMailURL   string `json:"cloudflareMailUrl"`
+	CloudflareMailToken string `json:"cloudflareMailToken"`
+	ViOTPToken          string `json:"viOTPToken"`
+	ViOTPServiceID      int    `json:"viOTPServiceID"`
+	CodexEnabled        bool   `json:"codexEnabled"`
+	CodexOutput         string `json:"codexOutput"`
+	PanelOutputDir      string `json:"panelOutputDir"`
 }
 
 // JobResult holds the outcome broadcast when a job finishes.

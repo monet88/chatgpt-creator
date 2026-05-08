@@ -84,7 +84,7 @@ export const apiHtml = `<!doctype html>
 
   <div style="max-width:900px;margin:0 auto;padding:32px 24px 0">
     <h1 style="font-size:36px;font-weight:700;margin-bottom:8px">API Documentation</h1>
-    <p style="color:var(--muted);font-size:15px">REST API tích hợp TempMail. Không cần xác thực. Miễn phí hoàn toàn.</p>
+    <p style="color:var(--muted);font-size:15px">REST API tích hợp TempMail. Public mode không cần xác thực; private mode hỗ trợ bearer token.</p>
   </div>
 
   <div class="doc-tabs" id="doc-tabs">
@@ -99,7 +99,7 @@ export const apiHtml = `<!doctype html>
 
     <!-- Introduction -->
     <div class="doc-section active" id="tab-intro">
-      <p class="section-intro">TempMail cung cấp REST API đơn giản để tích hợp hộp thư tạm thời vào ứng dụng của bạn. Tất cả endpoints đều public, không yêu cầu API key hay xác thực.</p>
+      <p class="section-intro">TempMail cung cấp REST API đơn giản để tích hợp hộp thư tạm thời vào ứng dụng của bạn. Public deployment dùng <code>AUTH_DISABLED=true</code> nên không cần API key. Nếu bật private mode, gửi header <code>Authorization: Bearer &lt;API_TOKEN&gt;</code>.</p>
       <div class="base-url-box">
         <span class="label">BASE URL</span>
         <code id="base-url-val"></code>
@@ -233,14 +233,14 @@ export const apiHtml = `<!doctype html>
 
     <!-- Examples -->
     <div class="doc-section" id="tab-examples">
-      <p class="section-intro">Ví dụ sử dụng API với <code style="background:var(--surface2);padding:1px 6px;border-radius:3px">curl</code>. Thay <code style="background:var(--surface2);padding:1px 6px;border-radius:3px">BASE_URL</code> bằng URL thực của bạn.</p>
+      <p class="section-intro">Ví dụ sử dụng API public với <code style="background:var(--surface2);padding:1px 6px;border-radius:3px">curl</code>. Thay <code style="background:var(--surface2);padding:1px 6px;border-radius:3px">BASE_URL</code> bằng URL thực của bạn.</p>
 
       <div class="section-label">1. Tạo email ngẫu nhiên</div>
       <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" | jq</div>
 
       <div class="section-label" style="margin-top:20px">2. Tạo email với username tuỳ chỉnh</div>
-      <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" \\
-  -H "Content-Type: application/json" \\
+      <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" \
+  -H "Content-Type: application/json" \
   -d '{"user":"myname","domain":"monet.uno"}' | jq</div>
 
       <div class="section-label" style="margin-top:20px">3. Kiểm tra hộp thư</div>
@@ -278,7 +278,7 @@ export const apiHtml = `<!doctype html>
     <div class="doc-section" id="tab-notes">
       <div class="note-box">⚠️ Email tạm thời sẽ tự động bị xóa sau <strong>3 ngày</strong> kể từ khi nhận.</div>
       <div class="note-box" style="background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.2);color:#60a5fa">ℹ️ Rate limit: tối đa <strong>120 request / 60 giây</strong> mỗi IP. Vượt quá sẽ nhận lỗi 429.</div>
-      <div class="note-box" style="background:rgba(34,197,94,.06);border-color:rgba(34,197,94,.2);color:#4ade80">✅ Không cần API key hay xác thực. Tất cả endpoints đều public và miễn phí.</div>
+      <div class="note-box" style="background:rgba(34,197,94,.06);border-color:rgba(34,197,94,.2);color:#4ade80">✅ Public mode đang bật để mọi người dùng UI và API không cần token. Rate limit vẫn bảo vệ chống lạm dụng cơ bản.</div>
       <p style="color:var(--muted);font-size:13px;margin-top:20px;line-height:1.7">
         Hệ thống chạy trên Cloudflare Workers + D1 + R2 — đảm bảo tốc độ cao và độ trễ thấp trên toàn cầu.
         Email được xử lý qua Cloudflare Email Routing và lưu trữ tạm trong 3 ngày trước khi tự động dọn dẹp.

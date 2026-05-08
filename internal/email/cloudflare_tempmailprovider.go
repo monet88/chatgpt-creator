@@ -13,15 +13,21 @@ import (
 // CloudflareTempMailProvider polls the Cloudflare temp-mail Worker API
 // to retrieve OTP codes sent to a @<domain> address managed by the Worker.
 type CloudflareTempMailProvider struct {
-	baseURL    string // e.g. "https://mail.monet.uno"
-	httpClient *http.Client
+	baseURL      string // e.g. "https://mail.monet.uno"
+	apiToken     string
+	httpClient   *http.Client
 	pollInterval time.Duration
 }
 
 // NewCloudflareTempMailProvider creates a provider pointing at the given Worker base URL.
-func NewCloudflareTempMailProvider(baseURL string) *CloudflareTempMailProvider {
+func NewCloudflareTempMailProvider(baseURL string, apiToken ...string) *CloudflareTempMailProvider {
+	token := ""
+	if len(apiToken) > 0 {
+		token = strings.TrimSpace(apiToken[0])
+	}
 	return &CloudflareTempMailProvider{
 		baseURL:      strings.TrimRight(baseURL, "/"),
+		apiToken:     token,
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
 		pollInterval: 5 * time.Second,
 	}
@@ -53,13 +59,19 @@ func (c *CloudflareTempMailProvider) GetOTP(ctx context.Context, emailAddr strin
 	// stale entries from prior registration attempts on the same mailbox.
 	freshSince := time.Now().Add(-60 * time.Second)
 	deadline := time.Now().Add(timeout)
+	var lastErr error
 	for {
 		code, err := c.fetchFreshOTP(ctx, otpURL, freshSince)
-		if err == nil && code != "" {
+		if err != nil {
+			lastErr = err
+		} else if code != "" {
 			return code, nil
 		}
 
 		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return "", fmt.Errorf("cloudflare-tempmailprovider: OTP timeout after %v for %s: last error: %w", timeout, emailAddr, lastErr)
+			}
 			return "", fmt.Errorf("cloudflare-tempmailprovider: OTP timeout after %v for %s", timeout, emailAddr)
 		}
 
@@ -71,12 +83,19 @@ func (c *CloudflareTempMailProvider) GetOTP(ctx context.Context, emailAddr strin
 	}
 }
 
+func (c *CloudflareTempMailProvider) authorize(req *http.Request) {
+	if c.apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiToken)
+	}
+}
+
 // fetchFreshOTP fetches the latest OTP and returns it only if receivedAt is after freshSince.
 func (c *CloudflareTempMailProvider) fetchFreshOTP(ctx context.Context, otpURL string, freshSince time.Time) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, otpURL, nil)
 	if err != nil {
 		return "", err
 	}
+	c.authorize(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -105,11 +124,12 @@ func (c *CloudflareTempMailProvider) fetchFreshOTP(ctx context.Context, otpURL s
 		return "", nil
 	}
 
-	if result.Data.ReceivedAt != "" {
-		receivedAt, parseErr := time.Parse(time.RFC3339Nano, result.Data.ReceivedAt)
-		if parseErr == nil && receivedAt.Before(freshSince) {
-			return "", nil
-		}
+	receivedAt, parseErr := time.Parse(time.RFC3339Nano, result.Data.ReceivedAt)
+	if parseErr != nil {
+		return "", fmt.Errorf("cloudflare-tempmailprovider: invalid receivedAt %q: %w", result.Data.ReceivedAt, parseErr)
+	}
+	if receivedAt.Before(freshSince) {
+		return "", nil
 	}
 
 	return result.Data.OTP, nil
@@ -143,6 +163,7 @@ func (c *CloudflareTempMailProvider) CreateEmail(domain string) (string, error) 
 		return "", fmt.Errorf("cloudflare-tempmailprovider: generate request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.authorize(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -170,7 +191,7 @@ func (c *CloudflareTempMailProvider) CreateEmail(domain string) (string, error) 
 
 // CreateCloudflareTempEmail creates a new mailbox via the Worker API and returns the email address.
 // This satisfies the batchDependencies.createTempEmail signature.
-func CreateCloudflareTempEmail(baseURL string) func(domain string) (string, error) {
-	p := NewCloudflareTempMailProvider(baseURL)
+func CreateCloudflareTempEmail(baseURL string, apiToken ...string) func(domain string) (string, error) {
+	p := NewCloudflareTempMailProvider(baseURL, apiToken...)
 	return p.CreateEmail
 }

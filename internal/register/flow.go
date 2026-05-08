@@ -708,7 +708,10 @@ func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error
 		if c.panelOutputDir != "" {
 			fetchModels := tokens.IDToken != ""
 			entry := buildPanelEntry(ctx, emailAddr, tokens, fetchModels)
-			if panelErr := writePanelFile(c.panelOutputDir, entry); panelErr != nil {
+			c.fileMu.Lock()
+			panelErr := writePanelFile(c.panelOutputDir, entry)
+			c.fileMu.Unlock()
+			if panelErr != nil {
 				c.print("Codex: panel write failed: " + panelErr.Error())
 			} else {
 				c.print("Codex: panel file saved to " + c.panelOutputDir)

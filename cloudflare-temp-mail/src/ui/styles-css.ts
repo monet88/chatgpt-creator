@@ -95,7 +95,7 @@ button,input,select{font:inherit;color:inherit}
 .empty-state p{color:var(--muted);font-size:13px;line-height:1.6;max-width:360px}
 
 /* Table */
-.message-pager{align-items:center;justify-content:space-between;gap:16px;margin:16px 24px;
+.message-pager{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:16px 24px;
   background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 14px;flex-wrap:wrap}
 .page-size-label{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--text)}
 .page-size-label select{background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:6px 28px 6px 8px}
