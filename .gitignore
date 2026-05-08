@@ -31,3 +31,7 @@ register
 
 # Local proxy credentials
 /docs/proxy/
+
+.dev.vars*
+!.dev.vars.example
+!.env.example
