@@ -35,9 +35,9 @@ The Worker app is independently deployable and should be integrated through its 
 - Allow environment-based proxy override.
 - Prompt user for runtime values in `cmd/register/main.go`.
 - Run worker pool with configurable concurrency in the batch register module.
-- Generate temp emails and poll OTP from `generator.email`.
+- Generate temp emails and poll OTP from `generator.email` by default; provider overrides may source mailbox/OTP from Cloudflare Worker APIs.
 - Execute registration flow with conditional jumps based on redirect path.
-- Persist successful credentials to output file as `email|password`.
+- Persist successful credentials to output file as `email|password|mailboxURL`.
 - Persist bad domains to `blacklist.json` when `unsupported_email` is observed.
 
 ## Non-Functional Requirements
@@ -51,7 +51,7 @@ The Worker app is independently deployable and should be integrated through its 
 
 - User runs `go run cmd/register/main.go` and can complete prompt flow.
 - For `totalAccounts = N`, summary reports `Success: N` after retries.
-- Output file contains exactly one `email|password` line per success.
+- Output file contains exactly one `email|password|mailboxURL` line per success (mailboxURL can be empty when custom domains are used outside generator-backed mailboxes).
 - If an `unsupported_email` error string occurs, detected domain is saved to `blacklist.json`.
 
 ## Risks and Dependencies

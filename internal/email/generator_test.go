@@ -32,7 +32,7 @@ func TestCreateTempEmail_WithDefaultDomain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			emailAddr, err := CreateTempEmail(tt.domain)
+			emailAddr, mailboxURL, err := CreateTempEmail(tt.domain)
 			if err != nil {
 				t.Fatalf("CreateTempEmail() error = %v", err)
 			}
@@ -46,6 +46,10 @@ func TestCreateTempEmail_WithDefaultDomain(t *testing.T) {
 			}
 			if parts[1] != tt.domain {
 				t.Fatalf("domain = %q, want %q", parts[1], tt.domain)
+			}
+
+			if mailboxURL != "" {
+				t.Fatalf("mailboxURL = %q, want empty", mailboxURL)
 			}
 		})
 	}

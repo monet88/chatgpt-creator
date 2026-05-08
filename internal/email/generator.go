@@ -73,13 +73,14 @@ func AddBlacklistDomain(domain string) {
 }
 
 // CreateTempEmail fetches a new temp email using a random profile and gofakeit names.
-func CreateTempEmail(defaultDomain string) (string, error) {
+func CreateTempEmail(defaultDomain string) (emailAddr, mailboxURL string, err error) {
 	// If defaultDomain is set, skip fetching from generator.email
 	if defaultDomain != "" {
 		firstName := gofakeit.FirstName()
 		lastName := gofakeit.LastName()
-		email := strings.ToLower(firstName+lastName+util.RandStr(5)) + "@" + defaultDomain
-		return email, nil
+		localPart := strings.ToLower(firstName + lastName + util.RandStr(5))
+		email := localPart + "@" + defaultDomain
+		return email, "", nil
 	}
 
 	tlsProfile := randomTLSProfile()
@@ -89,27 +90,27 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
 	if err != nil {
-		return "", fmt.Errorf("failed to create tls client: %w", err)
+		return "", "", fmt.Errorf("failed to create tls client: %w", err)
 	}
 
 	req, err := fhttp.NewRequest(http.MethodGet, "https://generator.email/", nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch generator.email: %w", err)
+		return "", "", fmt.Errorf("failed to fetch generator.email: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("generator.email returned status: %d", resp.StatusCode)
+		return "", "", fmt.Errorf("generator.email returned status: %d", resp.StatusCode)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse HTML: %w", err)
+		return "", "", fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
 	domains := []string{"smartmail.de", "enayu.com", "crazymailing.com"}
@@ -123,7 +124,7 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 	})
 
 	if len(domains) == 0 {
-		return "", fmt.Errorf("all available domains are blacklisted")
+		return "", "", fmt.Errorf("all available domains are blacklisted")
 	}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -147,7 +148,7 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 	localPart += util.RandStr(3 + r.Intn(4))
 	email := localPart + "@" + randomDomain
 
-	return email, nil
+	return email, generatorEmailURL(randomDomain, localPart), nil
 }
 
 var otpRegex = regexp.MustCompile(`\d{6}`)

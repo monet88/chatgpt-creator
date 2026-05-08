@@ -23,7 +23,7 @@
 ### M3 — Secure Output and Automation (Completed)
 - Added redaction for password/proxy/token-like log content.
 - Added JSON run summary with failure taxonomy and stop reason.
-- Preserved `email|password` output file compatibility.
+- Extended output file format from `email|password` to `email|password|mailboxURL` for mailbox deep links.
 
 ### M4 — Ongoing Maintenance (In Progress)
 - Keep docs synced with behavior across both products (Go CLI + standalone Worker app).

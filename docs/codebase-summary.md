@@ -17,7 +17,7 @@ _Last updated: 2026-05-08 (web UI + panel writer)_
 - Purpose: batch registration CLI with OTP automation; also ships a built-in web UI.
 - Main path: `cmd/register` + `internal/*`.
 - External dependencies: OpenAI auth/sentinel endpoints and `generator.email`.
-- Output artifacts: credential output file + `blacklist.json` + optional Codex token files.
+- Output artifacts: credential output file (`email|password|mailboxURL`) + `blacklist.json` + optional Codex token files.
 - Key internal packages:
   - `internal/register/` — batch runner, flow state machine, panel token writer.
   - `internal/email/` — OTP provider interface; `CloudflareTempMailProvider` polls Worker API.

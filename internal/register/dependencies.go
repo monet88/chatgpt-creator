@@ -19,20 +19,20 @@ type flowRunner interface {
 
 type batchDependencies struct {
 	newClient        func(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (flowRunner, error)
-	createTempEmail  func(defaultDomain string) (string, error)
+	createTempEmail  func(defaultDomain string) (emailAddr, mailboxURL string, err error)
 	generatePassword func() string
 	randomName       func() (string, string)
 	randomBirthdate  func() string
-	writeCredential  func(outputFile, emailAddr, password string) error
+	writeCredential  func(outputFile, emailAddr, password, mailboxURL string) error
 	resolveProxy     func(ctx context.Context, fallback string) (string, error)
 	reportProxy      func(proxyURL string, success bool)
 	proxyStats       func() map[string]proxy.ProxyStats
 	otpProvider      email.OTPProvider
 	phoneProvider    phone.PhoneProvider
 	viOTPServiceID   int
-	codexEnabled    bool
-	codexOutput     string
-	panelOutputDir  string
+	codexEnabled     bool
+	codexOutput      string
+	panelOutputDir   string
 }
 
 func defaultBatchDependencies() batchDependencies {
@@ -63,11 +63,11 @@ func newClientWithDeps(deps batchDependencies, proxy, tag string, workerID int, 
 		return nil, err
 	}
 	if c, ok := client.(*Client); ok {
-		c.otpProvider    = deps.otpProvider
-		c.phoneProvider  = deps.phoneProvider
+		c.otpProvider = deps.otpProvider
+		c.phoneProvider = deps.phoneProvider
 		c.viOTPServiceID = deps.viOTPServiceID
-		c.codexEnabled   = deps.codexEnabled
-		c.codexOutput    = deps.codexOutput
+		c.codexEnabled = deps.codexEnabled
+		c.codexOutput = deps.codexOutput
 		c.panelOutputDir = deps.panelOutputDir
 	}
 	return client, nil
@@ -79,14 +79,14 @@ var _ email.OTPProvider = (*email.GeneratorEmailProvider)(nil)
 // defaultOTPTimeout is used when calling otpProvider.GetOTP.
 const defaultOTPTimeout = 60 * time.Second
 
-func appendCredential(outputFile, emailAddr, password string) error {
+func appendCredential(outputFile, emailAddr, password, mailboxURL string) error {
 	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to open output file: %w", err)
 	}
 	defer f.Close()
 
-	line := fmt.Sprintf("%s|%s\n", emailAddr, password)
+	line := fmt.Sprintf("%s|%s|%s\n", emailAddr, password, mailboxURL)
 	if _, err := f.WriteString(line); err != nil {
 		return fmt.Errorf("failed to write to output file: %w", err)
 	}

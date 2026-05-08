@@ -30,7 +30,7 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 					otpProvider = email.NewCloudflareTempMailProvider(cfg.CloudflareMailURL, cfg.CloudflareMailToken)
 				}
 
-				var createTempEmail func(string) (string, error)
+				var createTempEmail func(string) (emailAddr, mailboxURL string, err error)
 				if cfg.CloudflareMailURL != "" {
 					createTempEmail = email.CreateCloudflareTempEmail(cfg.CloudflareMailURL, cfg.CloudflareMailToken)
 				}

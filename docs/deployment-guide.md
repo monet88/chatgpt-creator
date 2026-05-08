@@ -37,7 +37,7 @@ go run cmd/register/main.go
 
 ## Runtime Artifacts
 
-- Output credentials file (`output_file` in config; default `results.txt`).
+- Output credentials file (`output_file` in config; default `results.txt`) with `email|password|mailboxURL` lines.
 - `blacklist.json` generated/updated automatically when blocked domains are detected.
 
 ## Operational Recommendations

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -191,7 +192,13 @@ func (c *CloudflareTempMailProvider) CreateEmail(domain string) (string, error) 
 
 // CreateCloudflareTempEmail creates a new mailbox via the Worker API and returns the email address.
 // This satisfies the batchDependencies.createTempEmail signature.
-func CreateCloudflareTempEmail(baseURL string, apiToken ...string) func(domain string) (string, error) {
+func CreateCloudflareTempEmail(baseURL string, apiToken ...string) func(domain string) (emailAddr, mailboxURL string, err error) {
 	p := NewCloudflareTempMailProvider(baseURL, apiToken...)
-	return p.CreateEmail
+	return func(domain string) (emailAddr, mailboxURL string, err error) {
+		emailAddr, err = p.CreateEmail(domain)
+		if err != nil {
+			return "", "", err
+		}
+		return emailAddr, p.baseURL + "/#" + url.QueryEscape(emailAddr), nil
+	}
 }
