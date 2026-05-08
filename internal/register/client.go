@@ -2,6 +2,7 @@ package register
 
 import (
 	"fmt"
+	"math/rand"
 	"net/url"
 	"sync"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"github.com/bogdanfinn/tls-client"
 	"github.com/google/uuid"
 
-	"github.com/verssache/chatgpt-creator/internal/chrome"
+	"github.com/monet88/chatgpt-creator/internal/chrome"
+	"github.com/monet88/chatgpt-creator/internal/email"
+	"github.com/monet88/chatgpt-creator/internal/phone"
 )
 
 const (
@@ -19,18 +22,27 @@ const (
 )
 
 type Client struct {
-	session     tls_client.HttpClient
-	proxy       string
-	tag         string
-	workerID    int
-	deviceID    string
-	impersonate string
-	major       int
-	fullVersion string
-	ua          string
-	secChUA     string
-	printMu     *sync.Mutex
-	fileMu      *sync.Mutex
+	session        tls_client.HttpClient
+	proxy          string
+	tag            string
+	workerID       int
+	deviceID       string
+	impersonate    string
+	major          int
+	fullVersion    string
+	ua             string
+	secChUA        string
+	platform       string
+	acceptLanguage string
+	acceptEncoding string
+	printMu        *sync.Mutex
+	fileMu         *sync.Mutex
+	otpProvider    email.OTPProvider
+	phoneProvider  phone.PhoneProvider
+	viOTPServiceID int
+	codexEnabled    bool
+	codexOutput     string
+	panelOutputDir  string
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {
@@ -71,6 +83,11 @@ func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*C
 	c.major = profile.Major
 	c.secChUA = profile.SecChUA
 
+	// Randomize browser attributes for fingerprint diversity
+	c.platform = profile.Platform
+	c.acceptLanguage = randomAcceptLanguage()
+	c.acceptEncoding = randomAcceptEncoding()
+
 	// Add initial cookie
 	u, _ := url.Parse(baseURL)
 	cookies := []*http.Cookie{
@@ -87,23 +104,42 @@ func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*C
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
+	// Build a randomized list of header setter functions to avoid fingerprinting
+	type headerSetter struct {
+		key   string
+		value string
+	}
+	var setters []headerSetter
+
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", c.ua)
+		setters = append(setters, headerSetter{"User-Agent", c.ua})
 	}
 	if req.Header.Get("Accept") == "" {
-		req.Header.Set("Accept", "*/*")
+		setters = append(setters, headerSetter{"Accept", "*/*"})
 	}
 	if req.Header.Get("Accept-Language") == "" {
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		setters = append(setters, headerSetter{"Accept-Language", c.acceptLanguage})
+	}
+	if req.Header.Get("Accept-Encoding") == "" {
+		setters = append(setters, headerSetter{"Accept-Encoding", c.acceptEncoding})
 	}
 	if req.Header.Get("sec-ch-ua") == "" {
-		req.Header.Set("sec-ch-ua", c.secChUA)
+		setters = append(setters, headerSetter{"sec-ch-ua", c.secChUA})
 	}
 	if req.Header.Get("sec-ch-ua-mobile") == "" {
-		req.Header.Set("sec-ch-ua-mobile", "?0")
+		setters = append(setters, headerSetter{"sec-ch-ua-mobile", "?0"})
 	}
 	if req.Header.Get("sec-ch-ua-platform") == "" {
-		req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+		setters = append(setters, headerSetter{"sec-ch-ua-platform", chrome.PlatformOSIdent(c.platform)})
+	}
+
+	// Shuffle header order for fingerprint diversity
+	rand.Shuffle(len(setters), func(i, j int) {
+		setters[i], setters[j] = setters[j], setters[i]
+	})
+
+	for _, s := range setters {
+		req.Header.Set(s.key, s.value)
 	}
 
 	return c.session.Do(req)
@@ -114,7 +150,7 @@ func (c *Client) log(step string, status int) {
 	defer c.printMu.Unlock()
 
 	ts := time.Now().Format("15:04:05")
-	fmt.Printf("[%s] [W%d] [%s] %s | %d\n", ts, c.workerID, c.tag, step, status)
+	diagnosticPrintf("[%s] [W%d] [%s] %s | %d\n", ts, c.workerID, c.tag, safeLogMessage(step), status)
 }
 
 func (c *Client) print(msg string) {
@@ -122,5 +158,32 @@ func (c *Client) print(msg string) {
 	defer c.printMu.Unlock()
 
 	ts := time.Now().Format("15:04:05")
-	fmt.Printf("[%s] [W%d] [%s] %s\n", ts, c.workerID, c.tag, msg)
+	diagnosticPrintf("[%s] [W%d] [%s] %s\n", ts, c.workerID, c.tag, safeLogMessage(msg))
+}
+
+// acceptLanguageOptions provides diverse Accept-Language header values.
+var acceptLanguageOptions = []string{
+	"en-US,en;q=0.9",
+	"en-US,en;q=0.9,vi;q=0.8",
+	"en-GB,en;q=0.9",
+	"en-US,en;q=0.9,es;q=0.8",
+	"en-US,en;q=0.9,fr;q=0.8",
+	"en;q=0.9",
+	"en-US,en;q=0.8",
+	"en-CA,en;q=0.9",
+}
+
+// acceptEncodingOptions provides diverse Accept-Encoding header values.
+var acceptEncodingOptions = []string{
+	"gzip, deflate, br",
+	"gzip, deflate, br, zstd",
+	"gzip, deflate",
+}
+
+func randomAcceptLanguage() string {
+	return acceptLanguageOptions[rand.Intn(len(acceptLanguageOptions))]
+}
+
+func randomAcceptEncoding() string {
+	return acceptEncodingOptions[rand.Intn(len(acceptEncodingOptions))]
 }

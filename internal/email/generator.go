@@ -1,10 +1,13 @@
 package email
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -18,7 +21,8 @@ import (
 	"github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 
-	"github.com/verssache/chatgpt-creator/internal/util"
+	"github.com/monet88/chatgpt-creator/internal/chrome"
+	"github.com/monet88/chatgpt-creator/internal/util"
 )
 
 var (
@@ -67,6 +71,7 @@ func AddBlacklistDomain(domain string) {
 	blacklistedDomains.Store(domain, true)
 	saveBlacklist()
 }
+
 // CreateTempEmail fetches a new temp email using a random profile and gofakeit names.
 func CreateTempEmail(defaultDomain string) (string, error) {
 	// If defaultDomain is set, skip fetching from generator.email
@@ -77,8 +82,9 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 		return email, nil
 	}
 
+	tlsProfile := randomTLSProfile()
 	options := []tls_client.HttpClientOption{
-		tls_client.WithClientProfile(profiles.Chrome_131),
+		tls_client.WithClientProfile(tlsProfile),
 	}
 
 	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
@@ -125,13 +131,72 @@ func CreateTempEmail(defaultDomain string) (string, error) {
 
 	firstName := gofakeit.FirstName()
 	lastName := gofakeit.LastName()
-	email := strings.ToLower(firstName+lastName+util.RandStr(5)) + "@" + randomDomain
+	var localPart string
+	switch r.Intn(5) {
+	case 0:
+		localPart = strings.ToLower(firstName + lastName)
+	case 1:
+		localPart = strings.ToLower(firstName + "." + lastName)
+	case 2:
+		localPart = strings.ToLower(lastName + firstName)
+	case 3:
+		localPart = strings.ToLower(firstName)
+	case 4:
+		localPart = strings.ToLower(lastName)
+	}
+	localPart += util.RandStr(3 + r.Intn(4))
+	email := localPart + "@" + randomDomain
 
 	return email, nil
 }
 
+var otpRegex = regexp.MustCompile(`\d{6}`)
+
+func generatorEmailMailboxPath(domain, username string) string {
+	return fmt.Sprintf("%s/%s", url.PathEscape(domain), url.PathEscape(username))
+}
+
+func generatorEmailURL(domain, username string) string {
+	return "https://generator.email/" + generatorEmailMailboxPath(domain, username)
+}
+
+func parseVerificationCodeFromHTML(reader io.Reader) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(reader)
+	if err != nil {
+		return "", err
+	}
+
+	otp := ""
+	doc.Find("#email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		text := s.Text()
+		matches := otpRegex.FindStringSubmatch(text)
+		if len(matches) == 0 {
+			return true
+		}
+		code := matches[0]
+		if code == "177010" {
+			return true
+		}
+		otp = code
+		return false
+	})
+
+	return otp, nil
+}
+
+// randomTLSProfile returns a random Chrome TLS profile for fingerprint diversity.
+func randomTLSProfile() profiles.ClientProfile {
+	profile, _, _ := chrome.RandomChromeVersion()
+	return chrome.MapToTLSProfile(profile.Impersonate)
+}
+
 // GetVerificationCode polls generator.email for the OTP using a custom cookie.
 func GetVerificationCode(email string, maxRetries int, delay time.Duration) (string, error) {
+	return GetVerificationCodeWithContext(context.Background(), email, maxRetries, delay)
+}
+
+// GetVerificationCodeWithContext polls generator.email for the OTP using a custom cookie and context-aware waits.
+func GetVerificationCodeWithContext(ctx context.Context, email string, maxRetries int, delay time.Duration) (string, error) {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid email format: %s", email)
@@ -139,69 +204,61 @@ func GetVerificationCode(email string, maxRetries int, delay time.Duration) (str
 	username := parts[0]
 	domain := parts[1]
 
-	otpRegex := regexp.MustCompile(`\d{6}`)
+	options := []tls_client.HttpClientOption{
+		tls_client.WithClientProfile(randomTLSProfile()),
+	}
+	client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+	if err != nil {
+		return "", fmt.Errorf("failed to create tls client: %w", err)
+	}
 
 	for i := 0; i < maxRetries; i++ {
-		options := []tls_client.HttpClientOption{
-			tls_client.WithClientProfile(profiles.Chrome_131),
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
 		}
 
-		client, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
-		if err != nil {
-			return "", fmt.Errorf("failed to create tls client: %w", err)
-		}
-
-		url := fmt.Sprintf("https://generator.email/%s/%s", domain, username)
-		req, err := fhttp.NewRequest(http.MethodGet, url, nil)
+		mailboxURL := generatorEmailURL(domain, username)
+		req, err := fhttp.NewRequest(http.MethodGet, mailboxURL, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Critical: Set request header Cookie: surl={domain}/{username} explicitly.
-		req.Header.Set("Cookie", fmt.Sprintf("surl=%s/%s", domain, username))
+		req.Header.Set("Cookie", "surl="+generatorEmailMailboxPath(domain, username))
 
 		resp, err := client.Do(req)
 		if err != nil {
-			// Log error and continue retrying
-			time.Sleep(delay)
+			if util.WaitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			time.Sleep(delay)
+			if util.WaitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
 
-		doc, err := goquery.NewDocumentFromReader(resp.Body)
+		otp, err := parseVerificationCodeFromHTML(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			time.Sleep(delay)
+			if util.WaitWithContext(ctx, delay) != nil {
+				return "", ctx.Err()
+			}
 			continue
 		}
-
-		// Find OTP in #email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg
-		otp := ""
-		doc.Find("#email-table > div.e7m.list-group-item.list-group-item-info > div.e7m.subj_div_45g45gg").EachWithBreak(func(i int, s *goquery.Selection) bool {
-			text := s.Text()
-			matches := otpRegex.FindStringSubmatch(text)
-			if len(matches) > 0 {
-				code := matches[0]
-				// Skip code "177010" explicitly
-				if code == "177010" {
-					return true // continue to next if any, but we only expect one
-				}
-				otp = code
-				return false // break
-			}
-			return true
-		})
 
 		if otp != "" {
 			return otp, nil
 		}
 
-		time.Sleep(delay)
+		if util.WaitWithContext(ctx, delay) != nil {
+			return "", ctx.Err()
+		}
 	}
 
 	return "", fmt.Errorf("failed to get verification code after %d retries", maxRetries)

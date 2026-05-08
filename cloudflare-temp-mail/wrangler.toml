@@ -1,0 +1,27 @@
+name = "cloudflare-temp-mail"
+main = "src/worker.ts"
+compatibility_date = "2026-05-07"
+workers_dev = true
+
+[vars]
+ENABLED_DOMAINS = "monet.uno"
+AUTH_DISABLED = "true"
+RETENTION_DAYS = "3"
+MAX_MESSAGE_BYTES = "1048576"
+PAGE_LIMIT = "50"
+CLEANUP_BATCH_SIZE = "100"
+RATE_LIMIT_MAX_REQUESTS = "120"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudflare-temp-mail"
+database_id = "3a89aa77-d397-41d6-bd29-3095fc38da66"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MAIL_BUCKET"
+bucket_name = "cloudflare-temp-mail"
+
+[triggers]
+crons = ["*/30 * * * *"]

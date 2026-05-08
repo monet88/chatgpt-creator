@@ -1,0 +1,24 @@
+{
+  "name": "cloudflare-temp-mail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "build": "tsc --noEmit",
+    "test": "vitest run && playwright test",
+    "test:unit": "vitest run",
+    "test:ui": "playwright test",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "postal-mime": "^2.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260503.0",
+    "@playwright/test": "^1.54.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.16.0"
+  }
+}
