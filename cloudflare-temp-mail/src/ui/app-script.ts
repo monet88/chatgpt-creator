@@ -81,7 +81,21 @@ const openMessage=async id=>{
     const d=await api('GET','/email/'+S.domain+'/'+S.user+'/messages/'+id);
     $('modal-from').textContent='Từ: '+(d.from||'');
     $('modal-subject').textContent=d.subject||'(không có tiêu đề)';
-    $('modal-body').textContent=d.text||d.html||'(không có nội dung)';
+    const bodyEl=$('modal-body');
+    if(d.html){
+      const iframe=document.createElement('iframe');
+      iframe.className='modal-iframe';
+      iframe.srcdoc=d.html;
+      iframe.setAttribute('sandbox','allow-popups');
+      bodyEl.replaceChildren(iframe);
+      bodyEl.dataset.type='html';
+    }else{
+      const pre=document.createElement('pre');
+      pre.className='modal-text';
+      pre.textContent=d.text||'(không có nội dung)';
+      bodyEl.replaceChildren(pre);
+      bodyEl.dataset.type='text';
+    }
     $('msg-modal').showModal();
   }catch(e){showError(e.message)}
 };

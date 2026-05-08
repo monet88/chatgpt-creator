@@ -115,7 +115,7 @@ export const uiHtml = `<!doctype html>
       <button id="close-modal" class="modal-close">✕</button>
       <p id="modal-from" class="modal-meta"></p>
       <h3 id="modal-subject" class="modal-subject"></h3>
-      <pre id="modal-body" class="modal-body"></pre>
+      <div id="modal-body" class="modal-body"></div>
     </div>
   </dialog>
 

@@ -122,9 +122,11 @@ dialog::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
 .modal-close:hover{color:var(--text)}
 .modal-meta{font-size:12px;color:var(--muted);margin-bottom:6px}
 .modal-subject{font-size:18px;font-weight:600;margin-bottom:16px;padding-right:40px}
-.modal-body{font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;
-  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
-  padding:16px;white-space:pre-wrap;max-height:50vh;overflow:auto;color:var(--muted)}
+.modal-body{background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  overflow:hidden;max-height:58vh}
+.modal-text{font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;
+  padding:16px;white-space:pre-wrap;overflow:auto;max-height:58vh;color:var(--muted);display:block}
+.modal-iframe{width:100%;height:55vh;border:none;background:#fff;display:block;border-radius:6px}
 
 /* Toast & Error */
 .toast{position:fixed;bottom:20px;right:20px;background:var(--surface);
