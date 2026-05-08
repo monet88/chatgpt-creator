@@ -1,6 +1,6 @@
 # Codebase Summary
 
-_Last updated: 2026-05-08_
+_Last updated: 2026-05-08 (web UI + panel writer)_
 
 ## Repository Snapshot
 
@@ -14,10 +14,14 @@ _Last updated: 2026-05-08_
 
 ### 1) `chatgpt-creator` CLI (Go)
 
-- Purpose: batch registration CLI with OTP automation.
+- Purpose: batch registration CLI with OTP automation; also ships a built-in web UI.
 - Main path: `cmd/register` + `internal/*`.
 - External dependencies: OpenAI auth/sentinel endpoints and `generator.email`.
-- Output artifacts: credential output file + `blacklist.json`.
+- Output artifacts: credential output file + `blacklist.json` + optional Codex token files.
+- Key internal packages:
+  - `internal/register/` — batch runner, flow state machine, panel token writer.
+  - `internal/email/` — OTP provider interface; `CloudflareTempMailProvider` polls Worker API.
+  - `internal/web/` — embedded web UI served by the `serve` subcommand (SSE log stream, `ui.html`).
 
 ### 2) `cloudflare-temp-mail` (TypeScript Worker)
 
@@ -36,12 +40,22 @@ _Last updated: 2026-05-08_
 
 ### CLI path (Go)
 
-1. CLI parses flags via Cobra.
+1. CLI parses flags via Cobra (`register` root command or `register serve` for web UI).
 2. Config loads from JSON with defaults and `PROXY` env override.
 3. Runtime options are validated.
 4. Batch runner executes worker loop with runtime controls.
 5. Worker runs registration flow + OTP polling and writes credential on success.
-6. Batch returns structured summary (`BatchResult`).
+6. Optional: post-registration Codex PKCE OAuth flow extracts `access_token`/`refresh_token`.
+7. Optional `--panel-output`: writes per-account `codex-{email}-{plan}.json` (panel-compatible format).
+8. Batch returns structured summary (`BatchResult`).
+
+### Web UI path (`register serve`)
+
+1. `serve` subcommand starts HTTP server (default `:8899`) and opens browser.
+2. `internal/web/server.go` serves embedded `ui.html` and exposes `/api/start`, `/api/stop`, `/api/events`.
+3. Form POST to `/api/start` spawns a goroutine running `RunBatchForCLIWithProviders` with `WithDiagnosticWriter` piped to an `SSEBroker`.
+4. Browser receives log lines via SSE (`EventSource`) and renders them in real-time.
+5. On completion, a `done` event is broadcast with success/failed/target counts.
 
 ### Worker path (Cloudflare)
 

@@ -122,6 +122,9 @@ type ProviderOptions struct {
 	CodexEnabled bool
 	// CodexOutput is the JSON file path where Codex tokens are appended.
 	CodexOutput string
+	// PanelOutputDir is the directory where per-account panel JSON files are written.
+	// Files are named codex-{email}-{plan}.json. No-op when empty.
+	PanelOutputDir string
 	// CreateTempEmail overrides the default temp email creation function.
 	// When set, it replaces the generator.email-based mailbox creation.
 	CreateTempEmail func(domain string) (string, error)
@@ -142,8 +145,9 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.viOTPServiceID = providers.ViOTPServiceID
 	}
 	if providers.CodexEnabled {
-		deps.codexEnabled = true
-		deps.codexOutput  = providers.CodexOutput
+		deps.codexEnabled   = true
+		deps.codexOutput    = providers.CodexOutput
+		deps.panelOutputDir = providers.PanelOutputDir
 	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool

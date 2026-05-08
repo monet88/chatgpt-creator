@@ -40,8 +40,9 @@ type Client struct {
 	otpProvider    email.OTPProvider
 	phoneProvider  phone.PhoneProvider
 	viOTPServiceID int
-	codexEnabled   bool
-	codexOutput    string
+	codexEnabled    bool
+	codexOutput     string
+	panelOutputDir  string
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {

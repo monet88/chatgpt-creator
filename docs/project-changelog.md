@@ -1,5 +1,20 @@
 # Project Changelog
 
+## 2026-05-08 — Web UI, Panel Token Writer, OTP Flow Hardening
+
+### Added
+- `register serve` subcommand: built-in HTTP server with embedded dark-theme web UI at `:8899`. Form-based config, real-time SSE log stream, Start/Stop buttons, no external dependencies.
+- `internal/web/` package: `SSEBroker`, `server.go`, `ui.html` (embedded via `//go:embed`).
+- `internal/register/panel_writer.go`: writes per-account `codex-{email}-{plan}.json` matching `playful-proxy-api-panel` format. Parses `id_token` JWT claims (`account_id`, `chatgpt_user_id`, `plan_type`, `organization_id`) without signature verification (token comes directly from OpenAI auth). Optionally fetches model mapping from `/backend-api/models`.
+- `--panel-output <dir>` flag (requires `--codex`): directory for per-account panel JSON files.
+
+### Fixed
+- `cloudflare-temp-mail/src/services/otp-extractor.ts`: regex `(?<![#\d])(\d{4,8})` — added `#` to lookbehind to prevent matching CSS hex colors (e.g., `#202123`) in OpenAI email templates as OTP.
+- `internal/register/flow.go` (`email-verification` branch): removed explicit `sendOTP()` call; OpenAI auto-sends OTP on redirect, calling again invalidated session state and caused `invalid_state 409`.
+- `internal/register/flow.go` (`register()`): added `openai-sentinel-token` header (required by `/api/accounts/user/register`).
+- `internal/email/cloudflare_tempmailprovider.go` (`GetOTP`): added 60-second freshness filter rejecting stale mailbox entries from prior registration attempts.
+- `internal/email/cloudflare_tempmailprovider.go` (`CreateEmail`): `json:",omitempty"` on domain field — empty domain serialized as `{}` instead of `{"domain":""}` which failed Worker's `??` operator check.
+
 ## 2026-05-08 — Cloudflare Temp Mail Public Launch & UI Overhaul
 
 ### Added

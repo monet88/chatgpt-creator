@@ -152,11 +152,17 @@ func (c *Client) register(email, password string) (int, map[string]interface{}, 
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
+	sentinelToken, err := sentinel.BuildSentinelToken(c.session, c.deviceID, "create_account", c.ua, c.secChUA, c.impersonate)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to get sentinel auth: %v", err)
+	}
+
 	req, _ := http.NewRequest("POST", regURL, bytes.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/create-account/password")
 	req.Header.Set("Origin", authURL)
+	req.Header.Set("openai-sentinel-token", sentinelToken)
 
 	applyTraceHeaders(req)
 
@@ -223,6 +229,9 @@ func (c *Client) validateOTP(code string) (int, map[string]interface{}, error) {
 	json.Unmarshal(body, &data)
 
 	c.log(fmt.Sprintf("Validate OTP [%s]", code), resp.StatusCode)
+	if resp.StatusCode >= 400 {
+		c.print(fmt.Sprintf("Validate OTP error body: %v", data))
+	}
 	return resp.StatusCode, data, nil
 }
 
@@ -260,6 +269,9 @@ func (c *Client) createAccount(name, birthdate string) (int, map[string]interfac
 	json.Unmarshal(body, &data)
 
 	c.log("Create Account", resp.StatusCode)
+	if resp.StatusCode >= 400 {
+		c.print(fmt.Sprintf("Create Account error body: %v", data))
+	}
 	return resp.StatusCode, data, nil
 }
 
@@ -380,7 +392,9 @@ func (c *Client) runFlow(ctx context.Context, emailAddr, password, name, birthda
 		}
 		needOTP = true
 	} else if strings.Contains(finalPath, "email-verification") || strings.Contains(finalPath, "email-otp") {
-		c.print("Jump to OTP verification stage")
+		// OpenAI auto-sends an OTP when redirecting to email-verification; calling sendOTP
+		// again resets session state and causes invalid_state on validation.
+		c.print("Jump to OTP verification stage (auto-OTP sent by OpenAI)")
 		needOTP = true
 	} else if strings.Contains(finalPath, "about-you") {
 		c.print("Jump to fill information stage")
@@ -691,6 +705,15 @@ func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error
 			return writeErr
 		}
 		c.print("Codex: tokens saved to " + c.codexOutput)
+		if c.panelOutputDir != "" {
+			fetchModels := tokens.IDToken != ""
+			entry := buildPanelEntry(ctx, emailAddr, tokens, fetchModels)
+			if panelErr := writePanelFile(c.panelOutputDir, entry); panelErr != nil {
+				c.print("Codex: panel write failed: " + panelErr.Error())
+			} else {
+				c.print("Codex: panel file saved to " + c.panelOutputDir)
+			}
+		}
 		return nil
 	case cbErr := <-cbErrCh:
 		return fmt.Errorf("codex: %w", cbErr)

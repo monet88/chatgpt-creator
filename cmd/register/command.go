@@ -77,8 +77,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 		imapPassword string
 		imapTLS      bool
 		// Codex flags
-		codexEnabled bool
-		codexOutput  string
+		codexEnabled   bool
+		codexOutput    string
+		panelOutputDir string
 		// Cloudflare temp-mail flag
 		cloudflareMailURL string
 	)
@@ -286,8 +287,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				providers.ViOTPServiceID = effectiveViOTPServiceID
 			}
 			if effectiveCodexEnabled {
-				providers.CodexEnabled = true
-				providers.CodexOutput  = effectiveCodexOutput
+				providers.CodexEnabled   = true
+				providers.CodexOutput    = effectiveCodexOutput
+				providers.PanelOutputDir = panelOutputDir
 			}
 
 			if jsonMode {
@@ -344,8 +346,11 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	// Codex flags
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
 	cmd.Flags().StringVar(&codexOutput, "codex-output", config.DefaultCodexOutput, "Unsupported in safe mode; Codex token output path")
+	cmd.Flags().StringVar(&panelOutputDir, "panel-output", "", "Directory for per-account panel JSON files (codex-{email}-{plan}.json); requires --codex")
 	// Cloudflare temp-mail flag
 	cmd.Flags().StringVar(&cloudflareMailURL, "cloudflare-mail-url", "", "Base URL of Cloudflare temp-mail Worker (e.g. https://mail.monet.uno)")
+
+	cmd.AddCommand(newServeCommand(out, errOut))
 
 	return cmd
 }

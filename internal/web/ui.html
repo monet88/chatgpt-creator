@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChatGPT Creator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#111;color:#e5e5e5;font-family:system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+h1{font-size:16px;font-weight:600;letter-spacing:.3px}
+#status{font-size:11px;padding:2px 10px;border-radius:99px;background:#222;color:#666;border:1px solid #333}
+#status.running{background:#14532d44;color:#4ade80;border-color:#16a34a55}
+main{flex:1;display:flex;min-height:0}
+.sidebar{width:276px;flex-shrink:0;background:#161616;border-right:1px solid #2a2a2a;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+.field label{display:block;font-size:11px;color:#777;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+input[type=text],input[type=number],select{width:100%;background:#0d0d0d;border:1px solid #2e2e2e;color:#e5e5e5;padding:6px 9px;border-radius:5px;font-size:12px;outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:#444}
+.row{display:flex;gap:8px}
+.row .field{flex:1}
+.check-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#bbb}
+.check-row input[type=checkbox]{width:14px;height:14px;accent-color:#16a34a;cursor:pointer;flex-shrink:0}
+#codex-sub{padding:6px 0 0 22px;display:none;flex-direction:column;gap:9px}
+details summary{font-size:11px;color:#555;cursor:pointer;user-select:none;padding:3px 0;list-style:none}
+details summary::before{content:"▸ "}
+details[open] summary::before{content:"▾ "}
+details[open] summary{color:#777}
+.adv-fields{display:flex;flex-direction:column;gap:9px;margin-top:8px}
+.btn-row{display:flex;gap:8px;margin-top:4px}
+button{flex:1;padding:8px;border-radius:5px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s}
+#btn-start{background:#16a34a;color:#fff}
+#btn-start:hover:not(:disabled){background:#15803d}
+#btn-start:disabled{background:#1c2e1f;color:#3d6645;cursor:not-allowed}
+#btn-stop{background:#252525;color:#ccc}
+#btn-stop:hover:not(:disabled){background:#303030}
+#btn-stop:disabled{background:#161616;color:#3a3a3a;cursor:not-allowed}
+.log-panel{flex:1;display:flex;flex-direction:column;min-width:0}
+#log{flex:1;font-family:'Courier New',monospace;font-size:11.5px;background:#0a0a0a;padding:12px 14px;overflow-y:auto;line-height:1.55;color:#666;white-space:pre-wrap;word-break:break-all}
+#log .ok{color:#4ade80}
+#log .err{color:#f87171}
+#log .hi{color:#93c5fd}
+#log .warn{color:#fbbf24}
+#summary{padding:7px 14px;background:#161616;border-top:1px solid #2a2a2a;font-size:11px;color:#555;min-height:28px}
+</style>
+</head>
+<body>
+<header>
+  <h1>ChatGPT Creator</h1>
+  <span id="status">Idle</span>
+</header>
+<main>
+<aside class="sidebar">
+  <div class="row">
+    <div class="field"><label>Accounts</label><input id="total" type="number" value="10" min="1"></div>
+    <div class="field"><label>Workers</label><input id="workers" type="number" value="3" min="1" max="20"></div>
+  </div>
+  <div class="field"><label>Output file</label><input id="output" type="text" value="accounts.txt"></div>
+  <div class="field"><label>Domain</label><input id="domain" type="text" placeholder="monet.uno"></div>
+  <div class="field"><label>Cloudflare Mail URL</label><input id="cfurl" type="text" placeholder="https://mail.monet.uno"></div>
+  <div class="field"><label>Proxy (optional)</label><input id="proxy" type="text" placeholder="http://host:port"></div>
+  <div class="check-row">
+    <input type="checkbox" id="codex" onchange="toggleCodex(this)">
+    <label for="codex">Extract Codex tokens</label>
+  </div>
+  <div id="codex-sub">
+    <div class="field"><label>Codex output file</label><input id="codex-out" type="text" value="codex-tokens.json"></div>
+    <div class="field"><label>Panel output dir</label><input id="panel-dir" type="text" placeholder="/path/to/auths"></div>
+  </div>
+  <details>
+    <summary>Advanced options</summary>
+    <div class="adv-fields">
+      <div class="field"><label>Password (blank = random)</label><input id="password" type="text" placeholder="(random)"></div>
+      <div class="field"><label>Pacing</label>
+        <select id="pacing">
+          <option value="human" selected>Human</option>
+          <option value="fast">Fast</option>
+          <option value="slow">Slow</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <div class="field"><label>ViOTP token</label><input id="viotp-token" type="text" placeholder="(optional)"></div>
+      <div class="field"><label>ViOTP service ID</label><input id="viotp-sid" type="number" value="0" min="0"></div>
+    </div>
+  </details>
+  <div class="btn-row">
+    <button id="btn-start" onclick="startJob()">Start</button>
+    <button id="btn-stop" onclick="stopJob()" disabled>Stop</button>
+  </div>
+</aside>
+<section class="log-panel">
+  <div id="log"></div>
+  <div id="summary">Ready — fill in the config and click Start.</div>
+</section>
+</main>
+<script>
+let es = null;
+
+function toggleCodex(cb) {
+  document.getElementById('codex-sub').style.display = cb.checked ? 'flex' : 'none';
+}
+
+function setRunning(r) {
+  document.getElementById('btn-start').disabled = r;
+  document.getElementById('btn-stop').disabled = !r;
+  const s = document.getElementById('status');
+  s.textContent = r ? 'Running' : 'Idle';
+  s.className = r ? 'running' : '';
+}
+
+function appendLog(line, cls) {
+  const log = document.getElementById('log');
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = line + '\n';
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function lineClass(l) {
+  if (/success|saved|tokens/i.test(l)) return 'ok';
+  if (/error|failed|timeout|invalid/i.test(l)) return 'err';
+  if (/warn|retry/i.test(l)) return 'warn';
+  if (/\[W\d+\]/.test(l)) return 'hi';
+  return '';
+}
+
+async function startJob() {
+  const cfg = {
+    total:          +document.getElementById('total').value   || 10,
+    workers:        +document.getElementById('workers').value || 3,
+    output:          document.getElementById('output').value,
+    domain:          document.getElementById('domain').value,
+    cloudflareMailUrl: document.getElementById('cfurl').value,
+    proxy:           document.getElementById('proxy').value,
+    codexEnabled:    document.getElementById('codex').checked,
+    codexOutput:     document.getElementById('codex-out').value,
+    panelOutputDir:  document.getElementById('panel-dir').value,
+    password:        document.getElementById('password').value,
+    pacing:          document.getElementById('pacing').value,
+    viOTPToken:      document.getElementById('viotp-token').value,
+    viOTPServiceID: +document.getElementById('viotp-sid').value || 0,
+  };
+
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('summary').textContent = 'Starting…';
+  connectSSE();
+
+  const res = await fetch('/api/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    appendLog('Error: ' + (data.error || res.statusText), 'err');
+    setRunning(false);
+    return;
+  }
+  setRunning(true);
+}
+
+async function stopJob() {
+  await fetch('/api/stop', { method: 'POST' });
+}
+
+function connectSSE() {
+  if (es) { es.close(); es = null; }
+  es = new EventSource('/api/events');
+  es.onmessage = e => {
+    try {
+      const m = JSON.parse(e.data);
+      if (m.type === 'log') {
+        appendLog(m.line, lineClass(m.line));
+      } else if (m.type === 'done') {
+        setRunning(false);
+        document.getElementById('summary').textContent =
+          `Done — ${m.success}/${m.target} succeeded, ${m.failed} failed (${m.stopReason})`;
+        es.close(); es = null;
+      } else if (m.type === 'error') {
+        appendLog('Error: ' + m.message, 'err');
+        setRunning(false);
+        es.close(); es = null;
+      }
+    } catch (_) { appendLog(e.data, ''); }
+  };
+  es.onerror = () => {
+    if (es && es.readyState === EventSource.CLOSED) { es = null; setRunning(false); }
+  };
+}
+</script>
+</body>
+</html>

@@ -1,13 +1,13 @@
 # ChatGPT Creator (Go)
 
-CLI tool for batch ChatGPT account registration with bounded retries, typed failures, redacted diagnostics, and optional JSON run summary.
+Batch ChatGPT account registration with OTP automation, rotating proxies, Codex token extraction, and a built-in web UI.
 
 ## Scope and Status
 
 - Language: Go
 - Entry point: `cmd/register/main.go`
-- Modes: non-interactive flags + interactive fallback
-- Output file format: `email|password` (unchanged)
+- Modes: web UI (`serve`), non-interactive flags, interactive fallback
+- Output formats: `email|password` credentials, Codex token JSON, per-account panel JSON
 
 ## Quick Start
 
@@ -21,6 +21,19 @@ CLI tool for batch ChatGPT account registration with bounded retries, typed fail
 git clone https://github.com/monet88/chatgpt-creator.git
 cd chatgpt-creator
 go mod download
+```
+
+### Web UI (recommended for non-technical users)
+
+```bash
+go run cmd/register/main.go serve
+# opens http://localhost:8899 automatically
+```
+
+Fill in the form, click **Start**. Logs stream in real-time. Supports all options including Cloudflare mail, proxy, Codex tokens, and panel output.
+
+```bash
+go run cmd/register/main.go serve --port 9000 --no-browser
 ```
 
 ### Non-interactive run
@@ -56,15 +69,22 @@ If no actionable runtime flags are provided, CLI falls back to interactive promp
 
 - Env override currently supported: `PROXY`
 - Flags:
-  - `--config`
-  - `--total`
-  - `--workers`
-  - `--proxy`
-  - `--output`
-  - `--password`
-  - `--domain`
-  - `--json`
-  - `--interactive`
+  - `--config`, `--total`, `--workers`, `--proxy`, `--output`, `--password`, `--domain`
+  - `--json`, `--interactive`, `--pacing` (`none`/`fast`/`human`/`slow`)
+  - `--cloudflare-mail-url` — Cloudflare temp-mail Worker base URL
+  - `--proxy-list` — path to proxy list file (one URL per line)
+  - `--viotp-token` / `--viotp-service-id` — ViOTP SMS provider
+  - `--codex` — enable post-registration Codex OAuth token extraction
+  - `--codex-output` — JSON array file for Codex tokens (default `codex-tokens.json`)
+  - `--panel-output` — directory for per-account `codex-{email}-{plan}.json` files
+
+### OTP Providers
+
+| Provider | Flag | Notes |
+|---|---|---|
+| `generator.email` | (default) | Built-in; no extra flags |
+| Cloudflare Worker | `--cloudflare-mail-url` | Polls `/api/v1/email/{domain}/{user}/otp`; rejects OTPs older than 60 s |
+| IMAP catch-all | `--imap-host` + `--imap-user` + `--imap-password` | TLS by default |
 
 ### Validation
 

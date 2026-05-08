@@ -30,8 +30,9 @@ type batchDependencies struct {
 	otpProvider      email.OTPProvider
 	phoneProvider    phone.PhoneProvider
 	viOTPServiceID   int
-	codexEnabled     bool
-	codexOutput      string
+	codexEnabled    bool
+	codexOutput     string
+	panelOutputDir  string
 }
 
 func defaultBatchDependencies() batchDependencies {
@@ -67,6 +68,7 @@ func newClientWithDeps(deps batchDependencies, proxy, tag string, workerID int, 
 		c.viOTPServiceID = deps.viOTPServiceID
 		c.codexEnabled   = deps.codexEnabled
 		c.codexOutput    = deps.codexOutput
+		c.panelOutputDir = deps.panelOutputDir
 	}
 	return client, nil
 }

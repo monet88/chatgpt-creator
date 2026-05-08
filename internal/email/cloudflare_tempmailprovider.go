@@ -30,25 +30,31 @@ func NewCloudflareTempMailProvider(baseURL string) *CloudflareTempMailProvider {
 type cfOTPResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
-		OTP string `json:"otp"`
+		OTP        string `json:"otp"`
+		ReceivedAt string `json:"receivedAt"`
 	} `json:"data"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
-// GetOTP polls the Worker OTP endpoint until a code is received or timeout expires.
+// GetOTP polls the Worker OTP endpoint until a fresh code is received or timeout expires.
+// Only OTPs with receivedAt after (now - otpFreshnessBuf) are accepted to reject stale mailbox entries.
 func (c *CloudflareTempMailProvider) GetOTP(ctx context.Context, emailAddr string, timeout time.Duration) (string, error) {
 	parts := strings.SplitN(emailAddr, "@", 2)
 	if len(parts) != 2 {
 		return "", fmt.Errorf("cloudflare-tempmailprovider: invalid email address: %q", emailAddr)
 	}
 	user, domain := parts[0], parts[1]
-	url := fmt.Sprintf("%s/api/v1/email/%s/%s/otp", c.baseURL, domain, user)
+	otpURL := fmt.Sprintf("%s/api/v1/email/%s/%s/otp", c.baseURL, domain, user)
 
+	// Accept OTPs received no earlier than 60s before polling starts to tolerate
+	// auto-sent OTPs that arrive slightly before GetOTP is called while rejecting
+	// stale entries from prior registration attempts on the same mailbox.
+	freshSince := time.Now().Add(-60 * time.Second)
 	deadline := time.Now().Add(timeout)
 	for {
-		code, err := c.fetchOTP(ctx, url)
+		code, err := c.fetchFreshOTP(ctx, otpURL, freshSince)
 		if err == nil && code != "" {
 			return code, nil
 		}
@@ -65,8 +71,9 @@ func (c *CloudflareTempMailProvider) GetOTP(ctx context.Context, emailAddr strin
 	}
 }
 
-func (c *CloudflareTempMailProvider) fetchOTP(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// fetchFreshOTP fetches the latest OTP and returns it only if receivedAt is after freshSince.
+func (c *CloudflareTempMailProvider) fetchFreshOTP(ctx context.Context, otpURL string, freshSince time.Time) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, otpURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -94,6 +101,17 @@ func (c *CloudflareTempMailProvider) fetchOTP(ctx context.Context, url string) (
 		return "", fmt.Errorf("cloudflare-tempmailprovider: API error: %s", msg)
 	}
 
+	if result.Data.OTP == "" {
+		return "", nil
+	}
+
+	if result.Data.ReceivedAt != "" {
+		receivedAt, parseErr := time.Parse(time.RFC3339Nano, result.Data.ReceivedAt)
+		if parseErr == nil && receivedAt.Before(freshSince) {
+			return "", nil
+		}
+	}
+
 	return result.Data.OTP, nil
 }
 
@@ -114,7 +132,10 @@ type cfGenerateResponse struct {
 
 // CreateEmail calls the Worker API to generate and register a new mailbox, returning the full email address.
 func (c *CloudflareTempMailProvider) CreateEmail(domain string) (string, error) {
-	payload, _ := json.Marshal(map[string]string{"domain": domain})
+	type generateRequest struct {
+		Domain string `json:"domain,omitempty"`
+	}
+	payload, _ := json.Marshal(generateRequest{Domain: domain})
 	url := c.baseURL + "/api/v1/email/generate"
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
