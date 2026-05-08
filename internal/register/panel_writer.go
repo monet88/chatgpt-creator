@@ -2,7 +2,9 @@ package register
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -156,7 +158,10 @@ func buildPanelEntry(ctx context.Context, email string, tokens *codex.TokenResul
 	return entry
 }
 
-const maxPanelFilenamePartLen = 120
+const (
+	maxPanelFilenamePartLen = 120
+	panelFilenameHashLen    = 12
+)
 
 func safePanelFilenamePart(value string) string {
 	value = strings.TrimSpace(value)
@@ -178,14 +183,23 @@ func safePanelFilenamePart(value string) string {
 	return cleaned
 }
 
-// writePanelFile writes a panelEntry to outputDir/codex-{email}-{plan}.json atomically.
+func panelFilename(entry *panelEntry) string {
+	digest := sha256.Sum256([]byte(entry.Email + "\x00" + entry.PlanType))
+	return fmt.Sprintf(
+		"codex-%s-%s-%s.json",
+		safePanelFilenamePart(entry.Email),
+		safePanelFilenamePart(entry.PlanType),
+		hex.EncodeToString(digest[:])[:panelFilenameHashLen],
+	)
+}
+
+// writePanelFile writes a panelEntry to a unique codex JSON file atomically.
 func writePanelFile(outputDir string, entry *panelEntry) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("panel: create output dir: %w", err)
 	}
 
-	filename := fmt.Sprintf("codex-%s-%s.json", safePanelFilenamePart(entry.Email), safePanelFilenamePart(entry.PlanType))
-	path := filepath.Join(outputDir, filename)
+	path := filepath.Join(outputDir, panelFilename(entry))
 
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {

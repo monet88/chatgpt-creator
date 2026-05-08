@@ -239,8 +239,8 @@ export const apiHtml = `<!doctype html>
       <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" | jq</div>
 
       <div class="section-label" style="margin-top:20px">2. Tạo email với username tuỳ chỉnh</div>
-      <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" \
-  -H "Content-Type: application/json" \
+      <div class="code-block" style="position:relative"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -s -X POST "BASE_URL/api/v1/email/generate" \\
+  -H "Content-Type: application/json" \\
   -d '{"user":"myname","domain":"monet.uno"}' | jq</div>
 
       <div class="section-label" style="margin-top:20px">3. Kiểm tra hộp thư</div>
