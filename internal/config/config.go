@@ -31,11 +31,11 @@ type Config struct {
 
 const (
 	DefaultProxy          = ""
-	DefaultOutputFile     = "results.txt"
 	DefaultConfigFilename = "config.json"
 	DefaultPassword       = "" // Min 12 characters
 	DefaultDomainValue    = ""
-	DefaultCodexOutput    = "codex-tokens.json"
+	DefaultCreDir         = "accounts/cre"
+	DefaultTokensDir      = "accounts/tokens"
 )
 
 // DefaultConfigPath returns the default path to the config file.
@@ -47,12 +47,10 @@ func DefaultConfigPath() string {
 func Load(path string) (*Config, error) {
 	cfg := &Config{
 		Proxy:           DefaultProxy,
-		OutputFile:      DefaultOutputFile,
 		DefaultPassword: DefaultPassword,
 		DefaultDomain:   DefaultDomainValue,
 		IMAPPort:        993,
 		IMAPUseTLS:      true,
-		CodexOutput:     DefaultCodexOutput,
 	}
 
 	// Try to read the file

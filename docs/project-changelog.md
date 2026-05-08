@@ -7,6 +7,8 @@
 - Temp email creation signature now consistently returns `(emailAddr, mailboxURL, err)` across provider paths used by batch registration.
 - `internal/email/generator.go` (`CreateTempEmail`): when `defaultDomain` is set, mailbox URL is intentionally empty (`""`) because custom domains may not map to a `generator.email` mailbox URL.
 - `internal/email/cloudflare_tempmailprovider.go` (`CreateCloudflareTempEmail`): mailbox URL now points to Worker inbox hash route as `<baseURL>/#<url-escaped-email>`.
+- Credential files now default to `accounts/cre/<datetime>.txt`; explicit output filenames stay deterministic, while trailing directory paths receive `<datetime>.txt`.
+- `--codex-output` is opt-in; `--codex` still writes per-account panel JSON under `accounts/tokens/` by default.
 
 ### Validation
 - `go test ./...` (133 passed in 11 packages)
@@ -118,7 +120,7 @@
 - Console output redacts sensitive values; password is never printed in plain text.
 
 ### Preserved Compatibility
-- Successful credential file format remains `email|password`.
+- Registration result shape and redaction behavior remain stable; credential output format later changed to `email|password|mailboxURL`.
 
 ### Validation
 - `go test ./...` passed.

@@ -7,7 +7,7 @@ Batch ChatGPT account registration with OTP automation, rotating proxies, Codex 
 - Language: Go
 - Entry point: `cmd/register/main.go`
 - Modes: web UI (`serve`), non-interactive flags, interactive fallback
-- Output formats: `email|password` credentials, Codex token JSON, per-account panel JSON
+- Output formats: `email|password|mailbox_url` credentials, optional Codex token JSON, per-account panel JSON
 
 ## Quick Start
 
@@ -57,7 +57,7 @@ If no actionable runtime flags are provided, CLI falls back to interactive promp
 ```json
 {
   "proxy": "",
-  "output_file": "results.txt",
+  "output_file": "",
   "default_password": "",
   "default_domain": ""
 }
@@ -75,8 +75,8 @@ If no actionable runtime flags are provided, CLI falls back to interactive promp
   - `--proxy-list` — path to proxy list file (one URL per line)
   - `--viotp-token` / `--viotp-service-id` — ViOTP SMS provider
   - `--codex` — enable post-registration Codex OAuth token extraction
-  - `--codex-output` — JSON array file for Codex tokens (default `codex-tokens.json`)
-  - `--panel-output` — directory for per-account `codex-{email}-{plan}.json` files
+  - `--codex-output` — optional JSON array file for Codex tokens
+  - `--panel-output` — directory for per-account `codex-{email}-{plan}.json` files; defaults to `accounts/tokens/` when `--codex` is enabled
 
 ### OTP Providers
 
@@ -91,16 +91,16 @@ If no actionable runtime flags are provided, CLI falls back to interactive promp
 - `--total > 0`
 - `--workers > 0`
 - password length `>= 12` when provided
-- output path must not be empty
+- empty output path resolves to `accounts/cre/<datetime>.txt`
 
 ## Output
 
 ### Credential file
 
-On success, credentials are appended to configured output file as:
+On success, credentials are appended to `accounts/cre/<datetime>.txt` by default. An explicit `--output` path is used exactly; a trailing directory path writes `<datetime>.txt` inside that directory.
 
 ```text
-email|password
+email|password|mailbox_url
 ```
 
 ### JSON summary (`--json`)
@@ -119,7 +119,7 @@ Example shape:
   "failures": 3,
   "elapsed": "2m 11s",
   "stop_reason": "target_reached",
-  "output_file": "results.txt",
+  "output_file": "accounts/cre/20260508-152809.txt",
   "failure_summary": {
     "unsupported_email": 2,
     "otp_timeout": 1

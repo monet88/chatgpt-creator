@@ -22,8 +22,11 @@ func TestLoad(t *testing.T) {
 		if cfg.Proxy != DefaultProxy {
 			t.Fatalf("Proxy = %q, want %q", cfg.Proxy, DefaultProxy)
 		}
-		if cfg.OutputFile != DefaultOutputFile {
-			t.Fatalf("OutputFile = %q, want %q", cfg.OutputFile, DefaultOutputFile)
+		if cfg.OutputFile != "" {
+			t.Fatalf("OutputFile = %q, want empty", cfg.OutputFile)
+		}
+		if cfg.CodexOutput != "" {
+			t.Fatalf("CodexOutput = %q, want empty", cfg.CodexOutput)
 		}
 		if cfg.DefaultPassword != DefaultPassword {
 			t.Fatalf("DefaultPassword = %q, want %q", cfg.DefaultPassword, DefaultPassword)

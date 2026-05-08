@@ -54,7 +54,7 @@ button{flex:1;padding:8px;border-radius:5px;border:none;font-size:12px;font-weig
     <div class="field"><label>Accounts</label><input id="total" type="number" value="10" min="1"></div>
     <div class="field"><label>Workers</label><input id="workers" type="number" value="3" min="1" max="20"></div>
   </div>
-  <div class="field"><label>Output file</label><input id="output" type="text" value="accounts.txt"></div>
+  <div class="field"><label>Output file</label><input id="output" type="text" placeholder="accounts/cre/<datetime>.txt"></div>
   <div class="field"><label>Domain</label><input id="domain" type="text" placeholder="monet.uno"></div>
   <div class="field"><label>Cloudflare Mail URL</label><input id="cfurl" type="text" placeholder="https://mail.monet.uno"></div>
   <div class="field"><label>Cloudflare Mail Token</label><input id="cf-token" type="password" placeholder="Bearer API token"></div>
@@ -64,8 +64,8 @@ button{flex:1;padding:8px;border-radius:5px;border:none;font-size:12px;font-weig
     <label for="codex">Extract Codex tokens</label>
   </div>
   <div id="codex-sub">
-    <div class="field"><label>Codex output file</label><input id="codex-out" type="text" value="codex-tokens.json"></div>
-    <div class="field"><label>Panel output dir</label><input id="panel-dir" type="text" placeholder="/path/to/auths"></div>
+    <div class="field"><label>Codex output file</label><input id="codex-out" type="text" placeholder="Optional array JSON path"></div>
+    <div class="field"><label>Panel output dir</label><input id="panel-dir" type="text" placeholder="accounts/tokens"></div>
   </div>
   <details>
     <summary>Advanced options</summary>

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,16 @@ const (
 var runBatchForCLI = register.RunBatchForCLI
 var runBatchWithProviders = register.RunBatchForCLIWithProviders
 var withDiagnosticWriter = register.WithDiagnosticWriter
+
+func resolveOutputPath(flagValue, baseDir, ext, datetime string) string {
+	if flagValue == "" {
+		return filepath.Join(baseDir, datetime+ext)
+	}
+	if strings.HasSuffix(flagValue, "/") || strings.HasSuffix(flagValue, "\\") {
+		return filepath.Join(strings.TrimRight(flagValue, "/\\"), datetime+ext)
+	}
+	return flagValue
+}
 
 type exitError struct {
 	code int
@@ -144,6 +155,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				cmd.Flags().Changed("viotp-service-id") ||
 				cmd.Flags().Changed("codex") ||
 				cmd.Flags().Changed("codex-output") ||
+				cmd.Flags().Changed("panel-output") ||
 				cmd.Flags().Changed("cloudflare-mail-url") ||
 				cmd.Flags().Changed("cloudflare-mail-token")
 			if interactive || !hasActionableFlags {
@@ -159,10 +171,6 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			if effectivePassword != "" && len(effectivePassword) < 12 {
 				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: password must be at least 12 characters")}
 			}
-			if strings.TrimSpace(effectiveOutput) == "" {
-				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --output must not be empty")}
-			}
-
 			effectiveViOTPToken := cfg.ViOTPToken
 			if cmd.Flags().Changed("viotp-token") {
 				effectiveViOTPToken = viOTPToken
@@ -195,6 +203,29 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			effectiveCodexOutput := cfg.CodexOutput
 			if cmd.Flags().Changed("codex-output") {
 				effectiveCodexOutput = codexOutput
+			}
+
+			datetime := time.Now().Format("20060102-150405")
+			outputPath := resolveOutputPath(effectiveOutput, config.DefaultCreDir, ".txt", datetime)
+			if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+				return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to create output dir: %w", err)}
+			}
+
+			codexPath := ""
+			if effectiveCodexEnabled && effectiveCodexOutput != "" {
+				codexPath = resolveOutputPath(effectiveCodexOutput, config.DefaultTokensDir, ".json", datetime)
+				if err := os.MkdirAll(filepath.Dir(codexPath), 0o755); err != nil {
+					return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to create tokens dir: %w", err)}
+				}
+			}
+
+			if effectiveCodexEnabled && panelOutputDir == "" {
+				panelOutputDir = config.DefaultTokensDir
+			}
+			if panelOutputDir != "" {
+				if err := os.MkdirAll(panelOutputDir, 0o755); err != nil {
+					return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to create panel dir: %w", err)}
+				}
 			}
 
 			var proxyPool *proxypool.RoundRobinPool
@@ -295,7 +326,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			}
 			if effectiveCodexEnabled {
 				providers.CodexEnabled = true
-				providers.CodexOutput = effectiveCodexOutput
+				providers.CodexOutput = codexPath
 				providers.PanelOutputDir = panelOutputDir
 			}
 
@@ -304,7 +335,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				withDiagnosticWriter(errOut, func() {
 					opts := register.DefaultBatchOptionsForCLI(total)
 					opts.PacingProfile = pacingProfile
-					result = runBatchWithProviders(cmd.Context(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
+					result = runBatchWithProviders(cmd.Context(), total, outputPath, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 				})
 				if err := json.NewEncoder(out).Encode(result); err != nil {
 					return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to encode json result: %w", err)}
@@ -317,7 +348,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 
 			opts := register.DefaultBatchOptionsForCLI(total)
 			opts.PacingProfile = pacingProfile
-			result := runBatchWithProviders(cmd.Context(), total, effectiveOutput, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
+			result := runBatchWithProviders(cmd.Context(), total, outputPath, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 			if result.Success < int64(result.Target) {
 				return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: target not reached (%d/%d), stop_reason=%s", result.Success, result.Target, result.StopReason)}
 			}
@@ -335,7 +366,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&proxy, "proxy", "", "Proxy URL")
 	cmd.Flags().StringVar(&proxyList, "proxy-list", "", "Path to proxy list file (one URL per line)")
 	cmd.Flags().IntVar(&proxyCooldown, "proxy-cooldown", 300, "Proxy cooldown in seconds after failure")
-	cmd.Flags().StringVar(&outputFile, "output", "", "Output file path")
+	cmd.Flags().StringVar(&outputFile, "output", "", "Credential output path; default accounts/cre/<datetime>.txt")
 	cmd.Flags().StringVar(&password, "password", "", "Default password")
 	cmd.Flags().StringVar(&domain, "domain", "", "Default email domain")
 	cmd.Flags().StringVar(&pacing, "pacing", "human", "Pacing profile: none, fast, human, slow")
@@ -352,8 +383,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&imapTLS, "imap-tls", true, "Use TLS for IMAP connection")
 	// Codex flags
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
-	cmd.Flags().StringVar(&codexOutput, "codex-output", config.DefaultCodexOutput, "Unsupported in safe mode; Codex token output path")
-	cmd.Flags().StringVar(&panelOutputDir, "panel-output", "", "Directory for per-account panel JSON files (codex-{email}-{plan}.json); requires --codex")
+	cmd.Flags().StringVar(&codexOutput, "codex-output", "", "Codex token array JSON path (opt-in); e.g. accounts/tokens/tokens.json")
+	cmd.Flags().StringVar(&panelOutputDir, "panel-output", "", "Per-account panel JSON dir; default accounts/tokens/ when --codex enabled")
 	// Cloudflare temp-mail flags
 	cmd.Flags().StringVar(&cloudflareMailURL, "cloudflare-mail-url", "", "Base URL of Cloudflare temp-mail Worker (e.g. https://mail.monet.uno)")
 	cmd.Flags().StringVar(&cloudflareMailToken, "cloudflare-mail-token", "", "Bearer token for Cloudflare temp-mail API")
@@ -439,6 +470,12 @@ func runInteractive(ctx context.Context, in io.Reader, out, errOut io.Writer, cf
 		return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: %w", pacingErr)}
 	}
 
+	datetime := time.Now().Format("20060102-150405")
+	outputPath := resolveOutputPath(outputFile, config.DefaultCreDir, ".txt", datetime)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: failed to create output dir: %w", err)}
+	}
+
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "-------------------------------------------")
 	fmt.Fprintln(out, "Configuration:")
@@ -452,13 +489,13 @@ func runInteractive(ctx context.Context, in io.Reader, out, errOut io.Writer, cf
 		fmt.Fprintln(out, "  Domain:         (random)")
 	}
 	fmt.Fprintf(out, "  Pacing:         %s\n", pacingProfile)
-	fmt.Fprintf(out, "  Output File:    %s\n", outputFile)
+	fmt.Fprintf(out, "  Output File:    %s\n", outputPath)
 	fmt.Fprintln(out, "-------------------------------------------")
 	fmt.Fprintln(out)
 
 	opts := register.DefaultBatchOptionsForCLI(totalAccounts)
 	opts.PacingProfile = pacingProfile
-	_ = runBatchForCLI(ctx, totalAccounts, outputFile, maxWorkers, proxy, defaultPassword, defaultDomain, opts)
+	_ = runBatchForCLI(ctx, totalAccounts, outputPath, maxWorkers, proxy, defaultPassword, defaultDomain, opts)
 	return nil
 }
 
