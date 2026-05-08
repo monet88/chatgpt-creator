@@ -698,24 +698,8 @@ func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error
 		if exchErr != nil {
 			return fmt.Errorf("codex: token exchange failed: %w", exchErr)
 		}
-		c.fileMu.Lock()
-		writeErr := writeCodexTokens(c.codexOutput, emailAddr, tokens)
-		c.fileMu.Unlock()
-		if writeErr != nil {
-			return writeErr
-		}
-		c.print("Codex: tokens saved to " + c.codexOutput)
-		if c.panelOutputDir != "" {
-			fetchModels := tokens.IDToken != ""
-			entry := buildPanelEntry(ctx, emailAddr, tokens, fetchModels)
-			c.fileMu.Lock()
-			panelErr := writePanelFile(c.panelOutputDir, entry)
-			c.fileMu.Unlock()
-			if panelErr != nil {
-				c.print("Codex: panel write failed: " + panelErr.Error())
-			} else {
-				c.print("Codex: panel file saved to " + c.panelOutputDir)
-			}
+		if err := c.writeCodexArtifacts(ctx, emailAddr, tokens); err != nil {
+			return err
 		}
 		return nil
 	case cbErr := <-cbErrCh:
@@ -723,6 +707,31 @@ func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (c *Client) writeCodexArtifacts(ctx context.Context, emailAddr string, tokens *codex.TokenResult) error {
+	if c.codexOutput != "" {
+		c.fileMu.Lock()
+		writeErr := writeCodexTokens(c.codexOutput, emailAddr, tokens)
+		c.fileMu.Unlock()
+		if writeErr != nil {
+			return writeErr
+		}
+		c.print("Codex: tokens saved to " + c.codexOutput)
+	}
+	if c.panelOutputDir != "" {
+		fetchModels := tokens.IDToken != ""
+		entry := buildPanelEntry(ctx, emailAddr, tokens, fetchModels)
+		c.fileMu.Lock()
+		panelErr := writePanelFile(c.panelOutputDir, entry)
+		c.fileMu.Unlock()
+		if panelErr != nil {
+			c.print("Codex: panel write failed: " + panelErr.Error())
+		} else {
+			c.print("Codex: panel file saved to " + c.panelOutputDir)
+		}
+	}
+	return nil
 }
 
 // maskPhone returns only the last 4 digits of a phone number to avoid PII in logs.
