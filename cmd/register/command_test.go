@@ -264,8 +264,8 @@ func TestCommand_CodexOutputFlag_WiredToProviders(t *testing.T) {
 
 // TestCommand_ViOTPFlagIsActionable verifies --viotp-token is treated as an actionable flag
 // (skips interactive prompt and proceeds to non-interactive validation).
+// Without --total, the command hits --total validation before reaching ViOTP checks.
 func TestCommand_ViOTPFlagIsActionable(t *testing.T) {
-	// Without --total, the command should reach the --total validation (not interactive prompt).
 	exitCode, stdout, stderr := executeCommandForTest(t, []string{"--viotp-token", "token"}, "")
 	if exitCode != exitCodeValidation {
 		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
@@ -275,6 +275,18 @@ func TestCommand_ViOTPFlagIsActionable(t *testing.T) {
 	}
 	if strings.Contains(stdout, "Total accounts to register:") {
 		t.Fatal("unexpected interactive prompt in stdout")
+	}
+}
+
+func TestCommand_ViOTPTokenWithoutServiceIDReturnsValidationError(t *testing.T) {
+	exitCode, _, stderr := executeCommandForTest(t, []string{
+		"--total", "1", "--workers", "1", "--viotp-token", "token",
+	}, "")
+	if exitCode != exitCodeValidation {
+		t.Fatalf("exitCode = %d, want %d", exitCode, exitCodeValidation)
+	}
+	if !strings.Contains(stderr, "--viotp-service-id must be > 0") {
+		t.Fatalf("stderr = %q", stderr)
 	}
 }
 

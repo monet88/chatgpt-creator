@@ -129,6 +129,95 @@ func InterceptCallback(ctx context.Context, listenAddr string, expectedState str
 	}
 }
 
+// StartCallbackInterceptor binds a local listener at an ephemeral port, returning the
+// redirect URI to embed in the authorize URL and a wait function that blocks until the
+// OAuth callback delivers a code, times out, or the context is cancelled.
+// The listener is bound synchronously so callers can build the authorize URL and visit it
+// immediately without any sleep-based synchronization.
+func StartCallbackInterceptor(ctx context.Context, expectedState string, timeout time.Duration) (redirectURI string, wait func() (string, error), err error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, fmt.Errorf("sso: bind callback listener: %w", err)
+	}
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	redirectURI = fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		state := r.URL.Query().Get("state")
+		if state != expectedState {
+			http.Error(w, "state mismatch", http.StatusBadRequest)
+			select {
+			case errCh <- fmt.Errorf("sso: state mismatch: got %q, want %q", state, expectedState):
+			default:
+			}
+			return
+		}
+
+		errParam := r.URL.Query().Get("error")
+		if errParam != "" {
+			desc := r.URL.Query().Get("error_description")
+			http.Error(w, "OAuth error: "+desc, http.StatusBadRequest)
+			select {
+			case errCh <- fmt.Errorf("sso: OAuth error: %s (%s)", errParam, desc):
+			default:
+			}
+			return
+		}
+
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			http.Error(w, "missing code", http.StatusBadRequest)
+			select {
+			case errCh <- fmt.Errorf("sso: callback missing authorization code"):
+			default:
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<html><body><h1>Authorization successful</h1><p>You can close this window.</p></body></html>")
+		select {
+		case codeCh <- code:
+		default:
+		}
+	})
+
+	server := &http.Server{Handler: mux}
+	go func() {
+		if serveErr := server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+			select {
+			case errCh <- fmt.Errorf("sso: server error: %w", serveErr):
+			default:
+			}
+		}
+	}()
+
+	wait = func() (string, error) {
+		defer func() {
+			shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutCtx)
+		}()
+		select {
+		case code := <-codeCh:
+			return code, nil
+		case cbErr := <-errCh:
+			return "", cbErr
+		case <-time.After(timeout):
+			return "", fmt.Errorf("sso: callback timeout after %v", timeout)
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
+
+	return redirectURI, wait, nil
+}
+
 // ExchangeCode exchanges the authorization code for tokens using the PKCE verifier.
 func ExchangeCode(ctx context.Context, cfg SSOConfig, code string, verifier string) (*TokenResult, error) {
 	data := url.Values{

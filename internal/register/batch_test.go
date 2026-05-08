@@ -1,7 +1,6 @@
 package register
 
 import (
-	"reflect"
 	"testing"
 	"time"
 )
@@ -29,10 +28,11 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestProviderOptions_ExposesPhoneAndCodexFields(t *testing.T) {
-	typeOfProviders := reflect.TypeOf(ProviderOptions{})
-	for _, field := range []string{"PhoneProvider", "ViOTPServiceID", "CodexEnabled", "CodexOutput"} {
-		if _, ok := typeOfProviders.FieldByName(field); !ok {
-			t.Fatalf("ProviderOptions missing expected field %q", field)
-		}
+	// Compile-time assertion: if any of these fields are removed, the build fails.
+	_ = ProviderOptions{
+		PhoneProvider:  nil,
+		ViOTPServiceID: 0,
+		CodexEnabled:   false,
+		CodexOutput:    "",
 	}
 }

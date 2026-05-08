@@ -166,6 +166,10 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				effectiveViOTPServiceID = viOTPServiceID
 			}
 
+			if effectiveViOTPToken != "" && effectiveViOTPServiceID <= 0 {
+				return &exitError{code: exitCodeValidation, err: fmt.Errorf("validation error: --viotp-service-id must be > 0 when --viotp-token is set")}
+			}
+
 			var viOTPClient *phone.ViOTPClient
 			if effectiveViOTPToken != "" {
 				viOTPClient = phone.NewViOTPClient(effectiveViOTPToken)

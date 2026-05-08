@@ -23,8 +23,7 @@ const (
 	phoneVerifyEndpoint = authURL + "/api/accounts/phone/send"
 	phoneOTPEndpoint    = authURL + "/api/accounts/phone/validate"
 	phoneOTPTimeout     = 120 * time.Second
-	// Codex SSO localhost callback server address and timeout.
-	codexCallbackAddr    = "127.0.0.1:22122"
+	// Codex SSO callback server timeout.
 	codexCallbackTimeout = 60 * time.Second
 )
 
@@ -293,7 +292,9 @@ func (c *Client) RunRegister(emailAddr, password, name, birthdate string) error 
 func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
 	err := c.runFlow(ctx, emailAddr, password, name, birthdate)
 	if err == nil && c.codexEnabled {
-		c.extractCodexTokens(ctx, emailAddr)
+		if codexErr := c.extractCodexTokens(ctx, emailAddr); codexErr != nil {
+			c.print("Codex extraction failed: " + codexErr.Error())
+		}
 	}
 	return err
 }
@@ -561,7 +562,7 @@ func (c *Client) handlePhoneChallenge(ctx context.Context) error {
 	if err != nil {
 		return NewFailure(FailurePhoneRentFailed, "rent_phone", 0, err)
 	}
-	c.print(fmt.Sprintf("Phone rented: %s (requestID: %s)", result.PhoneNumber, result.RequestID))
+	c.print(fmt.Sprintf("Phone rented: ...%s (requestID: %s)", maskPhone(result.PhoneNumber), result.RequestID))
 
 	if err := c.submitPhoneNumber(ctx, result.PhoneNumber); err != nil {
 		return NewFailure(FailurePhoneChallenge, "submit_phone", 0, err)
@@ -580,7 +581,10 @@ func (c *Client) submitPhoneNumber(ctx context.Context, phoneNumber string) erro
 	payload := map[string]string{"phone": phoneNumber}
 	jsonPayload, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", phoneVerifyEndpoint, bytes.NewReader(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, "POST", phoneVerifyEndpoint, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("phone submit request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/create-account")
@@ -604,7 +608,10 @@ func (c *Client) validatePhoneOTP(ctx context.Context, otp string) error {
 	payload := map[string]string{"code": otp}
 	jsonPayload, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", phoneOTPEndpoint, bytes.NewReader(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, "POST", phoneOTPEndpoint, bytes.NewReader(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("phone OTP validation request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/phone-verification")
@@ -616,7 +623,7 @@ func (c *Client) validatePhoneOTP(ctx context.Context, otp string) error {
 	}
 	defer resp.Body.Close()
 
-	c.log(fmt.Sprintf("Validate Phone OTP [%s]", otp), resp.StatusCode)
+	c.log("Validate Phone OTP", resp.StatusCode)
 	if !isSuccessStatus(resp.StatusCode) {
 		return NewFailure(FailurePhoneOTPTimeout, "validate_phone_otp", resp.StatusCode,
 			fmt.Errorf("phone OTP validation failed (status=%d)", resp.StatusCode))
@@ -626,40 +633,46 @@ func (c *Client) validatePhoneOTP(ctx context.Context, otp string) error {
 
 // extractCodexTokens runs the Codex PKCE OAuth flow immediately after a successful
 // registration using the existing authenticated session, then appends the tokens to
-// the output file. Failures are logged but do not affect the registration result.
-func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) {
+// the output file. Returns an error on failure; does not affect the registration result.
+func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error {
 	pkce, err := codex.GeneratePKCE()
 	if err != nil {
-		c.print("Codex: PKCE generation failed: " + err.Error())
-		return
+		return fmt.Errorf("codex: PKCE generation failed: %w", err)
 	}
 
 	state := util.GenerateUUID()
+
+	// StartCallbackInterceptor binds the listener synchronously, eliminating the
+	// timing race from a fixed port + sleep approach, and gives each worker its own
+	// ephemeral port to avoid "bind: address already in use" under concurrent workers.
+	redirectURI, waitFn, err := codex.StartCallbackInterceptor(ctx, state, codexCallbackTimeout)
+	if err != nil {
+		return fmt.Errorf("codex: %w", err)
+	}
+
 	cfg := codex.DefaultSSOConfig()
+	cfg.RedirectURI = redirectURI
 	authorizeURL := codex.BuildAuthorizeURL(cfg, pkce, state)
 
 	codeCh := make(chan string, 1)
-	errCh := make(chan error, 1)
+	cbErrCh := make(chan error, 1)
 	go func() {
-		code, cbErr := codex.InterceptCallback(ctx, codexCallbackAddr, state, codexCallbackTimeout)
-		if cbErr != nil {
-			errCh <- cbErr
+		code, waitErr := waitFn()
+		if waitErr != nil {
+			cbErrCh <- waitErr
 		} else {
 			codeCh <- code
 		}
 	}()
 
-	// Allow the callback server goroutine to bind its port before we visit the URL.
-	if wErr := waitWithContext(ctx, 150*time.Millisecond); wErr != nil {
-		return
+	req, reqErr := http.NewRequestWithContext(ctx, "GET", authorizeURL, nil)
+	if reqErr != nil {
+		return fmt.Errorf("codex: create authorize request: %w", reqErr)
 	}
-
-	req, _ := http.NewRequest("GET", authorizeURL, nil)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	resp, err := c.do(req)
 	if err != nil {
-		c.print("Codex: authorize request failed: " + err.Error())
-		return
+		return fmt.Errorf("codex: authorize request failed: %w", err)
 	}
 	if resp != nil {
 		resp.Body.Close()
@@ -669,21 +682,29 @@ func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) {
 	case code := <-codeCh:
 		tokens, exchErr := codex.ExchangeCode(ctx, cfg, code, pkce.Verifier)
 		if exchErr != nil {
-			c.print("Codex: token exchange failed: " + exchErr.Error())
-			return
+			return fmt.Errorf("codex: token exchange failed: %w", exchErr)
 		}
 		c.fileMu.Lock()
 		writeErr := writeCodexTokens(c.codexOutput, emailAddr, tokens)
 		c.fileMu.Unlock()
 		if writeErr != nil {
-			c.print("Codex: " + writeErr.Error())
-		} else {
-			c.print("Codex: tokens saved to " + c.codexOutput)
+			return writeErr
 		}
-	case cbErr := <-errCh:
-		c.print("Codex: " + cbErr.Error())
+		c.print("Codex: tokens saved to " + c.codexOutput)
+		return nil
+	case cbErr := <-cbErrCh:
+		return fmt.Errorf("codex: %w", cbErr)
 	case <-ctx.Done():
+		return ctx.Err()
 	}
+}
+
+// maskPhone returns only the last 4 digits of a phone number to avoid PII in logs.
+func maskPhone(phone string) string {
+	if len(phone) <= 4 {
+		return "****"
+	}
+	return phone[len(phone)-4:]
 }
 
 type codexTokenEntry struct {
