@@ -37,14 +37,14 @@ go run cmd/register/main.go
 
 ## Runtime Artifacts
 
-- Output credentials file (`output_file` in config; default `results.txt`) with `email|password|mailboxURL` lines.
+- Output credentials file defaults to `accounts/cre/<datetime>.txt`; explicit `output_file` values are used exactly, while trailing directory paths receive `<datetime>.txt`. Lines use `email|password|mailboxURL`.
 - `blacklist.json` generated/updated automatically when blocked domains are detected.
 
 ## Operational Recommendations
 
 - Use a dedicated working directory per execution batch.
 - Rotate output files by date/batch.
-- Avoid committing runtime artifacts (`results.txt`, `blacklist.json`) to git.
+- Avoid committing runtime artifacts (`accounts/`, `blacklist.json`) to git.
 - Monitor for endpoint/schema drift if runs start failing consistently.
 
 ## Standalone Worker Deployment (`cloudflare-temp-mail`)

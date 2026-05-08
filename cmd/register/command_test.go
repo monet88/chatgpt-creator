@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/monet88/chatgpt-creator/internal/config"
 	"github.com/monet88/chatgpt-creator/internal/proxy"
 	"github.com/monet88/chatgpt-creator/internal/register"
 )
@@ -26,13 +27,26 @@ type batchCall struct {
 func executeCommandForTest(t *testing.T, args []string, stdin string) (int, string, string) {
 	t.Helper()
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
 	in := strings.NewReader(stdin)
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 
 	cmd := newRegisterCommand(in, &out, &errOut)
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err = cmd.Execute()
 	if err == nil {
 		return 0, out.String(), errOut.String()
 	}
@@ -47,6 +61,33 @@ func executeCommandForTest(t *testing.T, args []string, stdin string) (int, stri
 	errOut.WriteString(err.Error())
 	errOut.WriteString("\n")
 	return exitCodeRuntime, out.String(), errOut.String()
+}
+
+func TestResolveOutputPath(t *testing.T) {
+	datetime := "20260508-152809"
+	tests := []struct {
+		name    string
+		flag    string
+		baseDir string
+		ext     string
+		want    string
+	}{
+		{name: "default path", flag: "", baseDir: config.DefaultCreDir, ext: ".txt", want: filepath.Join("accounts", "cre", "20260508-152809.txt")},
+		{name: "explicit file path", flag: "results.txt", ext: ".txt", want: "results.txt"},
+		{name: "nested file", flag: filepath.Join("out", "creds.txt"), ext: ".txt", want: filepath.Join("out", "creds.txt")},
+		{name: "missing extension", flag: "noext", ext: ".txt", want: "noext"},
+		{name: "directory path", flag: "out/", ext: ".txt", want: filepath.Join("out", "20260508-152809.txt")},
+		{name: "windows directory path", flag: "out\\", ext: ".txt", want: filepath.Join("out", "20260508-152809.txt")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveOutputPath(tt.flag, tt.baseDir, tt.ext, datetime)
+			if got != tt.want {
+				t.Fatalf("resolveOutputPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestCommand_NonInteractiveParsing(t *testing.T) {
@@ -97,7 +138,7 @@ func TestCommand_NonInteractiveParsing(t *testing.T) {
 		t.Fatalf("proxy = %q", captured.proxy)
 	}
 	if captured.outputFile != "flag-out.txt" {
-		t.Fatalf("outputFile = %q", captured.outputFile)
+		t.Fatalf("outputFile = %q, want explicit flag-out path", captured.outputFile)
 	}
 	if captured.defaultPassword != "flagpassword12" {
 		t.Fatalf("defaultPassword = %q", captured.defaultPassword)
@@ -113,6 +154,24 @@ func TestCommand_NonInteractiveParsing(t *testing.T) {
 	}
 	if strings.Contains(stdout, "flagpassword12") || strings.Contains(stderr, "flagpassword12") {
 		t.Fatalf("password leaked in output: stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func TestCommand_DefaultOutputPath(t *testing.T) {
+	var capturedOutput string
+	prevRunBatch := runBatchWithProviders
+	runBatchWithProviders = func(_ context.Context, totalAccounts int, outputFile string, _ int, _, _, _ string, _ register.BatchOptions, _ register.ProviderOptions) register.BatchResult {
+		capturedOutput = outputFile
+		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
+	}
+	t.Cleanup(func() { runBatchWithProviders = prevRunBatch })
+
+	exitCode, _, stderr := executeCommandForTest(t, []string{"--total", "1", "--workers", "1"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, stderr = %q", exitCode, stderr)
+	}
+	if !strings.HasPrefix(capturedOutput, filepath.Join(config.DefaultCreDir, "")) || !strings.HasSuffix(capturedOutput, ".txt") {
+		t.Fatalf("outputFile = %q, want accounts/cre/<datetime>.txt", capturedOutput)
 	}
 }
 
@@ -194,9 +253,11 @@ func TestCommand_ExplicitProxyCooldownOverridesConfigDefaultValue(t *testing.T) 
 
 func TestCommand_InteractiveFallbackUsesStdin(t *testing.T) {
 	var called bool
+	var capturedOutput string
 	prevRunBatchForCLI := runBatchForCLI
 	runBatchForCLI = func(ctx context.Context, totalAccounts int, outputFile string, maxWorkers int, proxy, defaultPassword, defaultDomain string, opts register.BatchOptions) register.BatchResult {
 		called = true
+		capturedOutput = outputFile
 		return register.BatchResult{Target: totalAccounts, Success: int64(totalAccounts), Attempts: int64(totalAccounts), StopReason: register.StopReasonTargetReached}
 	}
 	t.Cleanup(func() { runBatchForCLI = prevRunBatchForCLI })
@@ -211,6 +272,9 @@ func TestCommand_InteractiveFallbackUsesStdin(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("runBatch was not called")
+	}
+	if !strings.HasPrefix(capturedOutput, filepath.Join(config.DefaultCreDir, "")) || !strings.HasSuffix(capturedOutput, ".txt") {
+		t.Fatalf("outputFile = %q, want accounts/cre/<datetime>.txt", capturedOutput)
 	}
 	if !strings.Contains(stdout, "Total accounts to register:") {
 		t.Fatalf("stdout = %q", stdout)
@@ -242,6 +306,12 @@ func TestCommand_CodexEnabled_WiredToProviders(t *testing.T) {
 	if !capturedProviders.CodexEnabled {
 		t.Fatal("expected CodexEnabled=true in ProviderOptions")
 	}
+	if capturedProviders.CodexOutput != "" {
+		t.Fatalf("CodexOutput = %q, want empty without --codex-output", capturedProviders.CodexOutput)
+	}
+	if capturedProviders.PanelOutputDir != config.DefaultTokensDir {
+		t.Fatalf("PanelOutputDir = %q, want %q", capturedProviders.PanelOutputDir, config.DefaultTokensDir)
+	}
 }
 
 func TestCommand_CodexOutputFlag_WiredToProviders(t *testing.T) {
@@ -258,7 +328,7 @@ func TestCommand_CodexOutputFlag_WiredToProviders(t *testing.T) {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
 	if capturedProviders.CodexOutput != "custom.json" {
-		t.Fatalf("CodexOutput = %q, want %q", capturedProviders.CodexOutput, "custom.json")
+		t.Fatalf("CodexOutput = %q, want explicit custom JSON path", capturedProviders.CodexOutput)
 	}
 }
 
@@ -298,6 +368,7 @@ func TestCommand_ActionableFlagsSkipInteractiveFallback(t *testing.T) {
 		{name: "proxy cooldown", args: []string{"--proxy-cooldown", "10"}},
 		{name: "imap port", args: []string{"--imap-port", "993"}},
 		{name: "imap user", args: []string{"--imap-user", "user@example.com"}},
+		{name: "panel output", args: []string{"--panel-output", "tokens"}},
 	}
 
 	for _, tc := range testCases {

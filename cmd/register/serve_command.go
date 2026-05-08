@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"time"
 
+	"github.com/monet88/chatgpt-creator/internal/config"
 	"github.com/monet88/chatgpt-creator/internal/email"
 	"github.com/monet88/chatgpt-creator/internal/phone"
 	"github.com/monet88/chatgpt-creator/internal/register"
@@ -40,6 +44,12 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 					viOTPClient = phone.NewViOTPClient(cfg.ViOTPToken)
 				}
 
+				datetime := time.Now().Format("20060102-150405.000000000")
+				outputPath := resolveOutputPath(cfg.Output, config.DefaultCreDir, ".txt", datetime)
+				if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+					return web.JobResult{}, fmt.Errorf("failed to create output dir: %w", err)
+				}
+
 				providers := register.ProviderOptions{
 					OTPProvider:     otpProvider,
 					CreateTempEmail: createTempEmail,
@@ -48,10 +58,21 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 					providers.PhoneProvider = viOTPClient
 					providers.ViOTPServiceID = cfg.ViOTPServiceID
 				}
-				if cfg.CodexEnabled && cfg.CodexOutput != "" {
+				if cfg.CodexEnabled {
 					providers.CodexEnabled = true
-					providers.CodexOutput = cfg.CodexOutput
+					if cfg.CodexOutput != "" {
+						providers.CodexOutput = resolveOutputPath(cfg.CodexOutput, config.DefaultTokensDir, ".json", datetime)
+						if err := os.MkdirAll(filepath.Dir(providers.CodexOutput), 0o755); err != nil {
+							return web.JobResult{}, fmt.Errorf("failed to create tokens dir: %w", err)
+						}
+					}
 					providers.PanelOutputDir = cfg.PanelOutputDir
+					if providers.PanelOutputDir == "" {
+						providers.PanelOutputDir = config.DefaultTokensDir
+					}
+					if err := os.MkdirAll(providers.PanelOutputDir, 0o755); err != nil {
+						return web.JobResult{}, fmt.Errorf("failed to create tokens dir: %w", err)
+					}
 				}
 
 				pacing := cfg.Pacing
@@ -68,7 +89,7 @@ func newServeCommand(out, errOut io.Writer) *cobra.Command {
 					opts := register.DefaultBatchOptionsForCLI(cfg.Total)
 					opts.PacingProfile = pacingProfile
 					result = register.RunBatchForCLIWithProviders(
-						ctx, cfg.Total, cfg.Output, cfg.Workers,
+						ctx, cfg.Total, outputPath, cfg.Workers,
 						cfg.Proxy, cfg.Password, cfg.Domain, opts, providers,
 					)
 				})

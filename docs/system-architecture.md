@@ -62,7 +62,11 @@ Typed kinds:
 - Log safety: newline sanitization + token/password-like redaction
 - JSON mode: summary on stdout, diagnostics on stderr
 - JSON summary includes optional per-proxy stats when proxy pool is enabled
-- Credential persistence now includes mailbox URL as third pipe-delimited field
+- `Config.OutputFile` default is empty; runtime resolves credential path to `accounts/cre/<datetime>.txt`
+- If `output_file` or `--output` provides an explicit filename, runtime uses it exactly; trailing directory paths receive `<datetime>.txt`.
+- Credential persistence writes `email|password|mailboxURL` per successful account
+- `--codex-output` is opt-in (no default aggregate token array JSON path)
+- `--codex` writes per-account panel JSON under `accounts/tokens/` by default unless `--panel-output` is set
 
 ## External Interfaces
 
