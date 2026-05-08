@@ -122,6 +122,9 @@ type ProviderOptions struct {
 	CodexEnabled bool
 	// CodexOutput is the JSON file path where Codex tokens are appended.
 	CodexOutput string
+	// CreateTempEmail overrides the default temp email creation function.
+	// When set, it replaces the generator.email-based mailbox creation.
+	CreateTempEmail func(domain string) (string, error)
 }
 
 // RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
@@ -130,6 +133,9 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 
 	if providers.OTPProvider != nil {
 		deps.otpProvider = providers.OTPProvider
+	}
+	if providers.CreateTempEmail != nil {
+		deps.createTempEmail = providers.CreateTempEmail
 	}
 	if providers.PhoneProvider != nil {
 		deps.phoneProvider  = providers.PhoneProvider

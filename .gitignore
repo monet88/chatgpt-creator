@@ -5,6 +5,7 @@ chatgpt-creator
 .DS_Store
 
 # Config and Results
+.env
 results.txt
 blacklist.json
 results.txt

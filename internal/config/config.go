@@ -23,8 +23,9 @@ type Config struct {
 	IMAPUser        string `json:"imap_user"`
 	IMAPPassword    string `json:"imap_password"`
 	IMAPUseTLS      bool   `json:"imap_use_tls"`
-	CodexEnabled    bool   `json:"codex_enabled"`
-	CodexOutput     string `json:"codex_output"`
+	CodexEnabled       bool   `json:"codex_enabled"`
+	CodexOutput        string `json:"codex_output"`
+	CloudflareMailURL  string `json:"cloudflare_mail_url"`
 }
 
 const (
@@ -112,6 +113,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("CODEX_OUTPUT"); v != "" {
 		cfg.CodexOutput = v
+	}
+	if v := os.Getenv("CLOUDFLARE_MAIL_URL"); v != "" {
+		cfg.CloudflareMailURL = v
 	}
 
 	return cfg, nil

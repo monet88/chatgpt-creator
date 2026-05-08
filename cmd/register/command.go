@@ -79,6 +79,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 		// Codex flags
 		codexEnabled bool
 		codexOutput  string
+		// Cloudflare temp-mail flag
+		cloudflareMailURL string
 	)
 
 	cmd := &cobra.Command{
@@ -139,7 +141,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				cmd.Flags().Changed("viotp-token") ||
 				cmd.Flags().Changed("viotp-service-id") ||
 				cmd.Flags().Changed("codex") ||
-				cmd.Flags().Changed("codex-output")
+				cmd.Flags().Changed("codex-output") ||
+				cmd.Flags().Changed("cloudflare-mail-url")
 			if interactive || !hasActionableFlags {
 				return runInteractive(cmd.Context(), in, out, errOut, cfg, effectiveOutput)
 			}
@@ -231,6 +234,11 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				effectiveIMAPTLS = imapTLS
 			}
 
+			effectiveCloudflareMailURL := cfg.CloudflareMailURL
+			if cmd.Flags().Changed("cloudflare-mail-url") {
+				effectiveCloudflareMailURL = cloudflareMailURL
+			}
+
 			var otpProvider email.OTPProvider
 			if effectiveIMAPHost != "" && effectiveIMAPUser != "" && effectiveIMAPPassword != "" {
 				pooler, imapErr := email.NewIMAPPooler(email.IMAPConfig{
@@ -245,6 +253,13 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				}
 				defer pooler.Close()
 				otpProvider = pooler
+			} else if effectiveCloudflareMailURL != "" {
+				otpProvider = email.NewCloudflareTempMailProvider(effectiveCloudflareMailURL)
+			}
+
+			var cloudflareCreateEmail func(string) (string, error)
+			if effectiveCloudflareMailURL != "" {
+				cloudflareCreateEmail = email.CreateCloudflareTempEmail(effectiveCloudflareMailURL)
 			}
 
 			effectivePacing := cfg.Pacing
@@ -260,7 +275,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 			}
 
 			providers := register.ProviderOptions{
-				OTPProvider: otpProvider,
+				OTPProvider:     otpProvider,
+				CreateTempEmail: cloudflareCreateEmail,
 			}
 			if proxyPool != nil {
 				providers.ProxyPool = proxyPool
@@ -328,6 +344,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	// Codex flags
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
 	cmd.Flags().StringVar(&codexOutput, "codex-output", config.DefaultCodexOutput, "Unsupported in safe mode; Codex token output path")
+	// Cloudflare temp-mail flag
+	cmd.Flags().StringVar(&cloudflareMailURL, "cloudflare-mail-url", "", "Base URL of Cloudflare temp-mail Worker (e.g. https://mail.monet.uno)")
 
 	return cmd
 }
