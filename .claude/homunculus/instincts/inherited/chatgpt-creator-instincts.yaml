@@ -1,0 +1,572 @@
+# Instincts generated from https://github.com/monet88/chatgpt-creator
+# Generated: 2026-05-07T06:59:50.778Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: chatgpt-creator-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, docs, refactor, chore
+
+## Evidence
+
+- 16 commits analyzed
+- Detected conventional commit pattern
+- Examples: docs: establish project documentation, coding standards, and GitNexus integration guidelines., chore: add .agents directory to .gitignore
+
+---
+id: chatgpt-creator-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Commit Length
+
+## Action
+
+Write moderate-length commit messages (~64 characters)
+
+## Evidence
+
+- Average commit message length: 64 chars
+- Based on 16 commits
+
+---
+id: chatgpt-creator-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: chatgpt-creator-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: chatgpt-creator-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: chatgpt-creator-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: 
+
+---
+id: chatgpt-creator-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Test Framework
+
+## Action
+
+Use vitest as the test framework
+
+## Evidence
+
+- Test framework detected: vitest
+- File pattern: *.test.ts
+
+---
+id: chatgpt-creator-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: chatgpt-creator-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Test Types
+
+## Action
+
+Write unit, integration tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration
+- Coverage config: no
+
+---
+id: chatgpt-creator-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~15x per month
+- Files: cloudflare-temp-mail/src/config/*, cloudflare-temp-mail/src/handlers/*, cloudflare-temp-mail/src/lib/*
+
+---
+id: chatgpt-creator-workflow-refactoring
+trigger: "when refactoring code"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Refactoring
+
+## Action
+
+Follow the refactoring workflow:
+1. Ensure tests pass before refactor
+2. Refactor code structure
+3. Verify tests still pass
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: src/**/*
+
+---
+id: chatgpt-creator-workflow-feature-development-with-tests-and-docs
+trigger: "when doing feature development with tests and docs"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Feature Development With Tests And Docs
+
+## Action
+
+Follow the feature-development-with-tests-and-docs workflow:
+1. Implement feature in source files (e.g., internal/*, cmd/*, cloudflare-temp-mail/src/*)
+2. Add or update corresponding tests (e.g., *_test.go, tests/*.ts)
+3. Update or add relevant documentation (e.g., docs/*.md, README.md, TODO.md, docs/project-changelog.md, docs/project-roadmap.md, docs/system-architecture.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: internal/**/*.go, cmd/**/*.go, cloudflare-temp-mail/src/**/*.ts
+
+---
+id: chatgpt-creator-workflow-post-review-hardening-and-bugfix
+trigger: "when doing post review hardening and bugfix"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Post Review Hardening And Bugfix
+
+## Action
+
+Follow the post-review-hardening-and-bugfix workflow:
+1. Update code to address review findings or bugs (e.g., internal/*, cmd/*, cloudflare-temp-mail/src/*)
+2. Update or add regression/unit tests to cover fixes (e.g., *_test.go, tests/*.ts)
+3. Synchronize documentation and changelogs (e.g., docs/project-changelog.md, docs/deployment-guide.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: internal/**/*.go, cmd/**/*.go, cloudflare-temp-mail/src/**/*.ts
+
+---
+id: chatgpt-creator-workflow-documentation-synchronization
+trigger: "when doing documentation synchronization"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Documentation Synchronization
+
+## Action
+
+Follow the documentation-synchronization workflow:
+1. Edit or add documentation files (e.g., docs/*.md, AGENTS.md, CLAUDE.md, README.md)
+2. Synchronize index/metadata files if needed (e.g., AGENTS.md, CLAUDE.md)
+3. Optionally update codebase summary or roadmap
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: docs/**/*.md, README.md, AGENTS.md
+
+---
+id: chatgpt-creator-workflow-cloudflare-temp-mail-worker-app-enhancement
+trigger: "when doing cloudflare temp mail worker app enhancement"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Workflow Cloudflare Temp Mail Worker App Enhancement
+
+## Action
+
+Follow the cloudflare-temp-mail-worker-app-enhancement workflow:
+1. Implement or update features in cloudflare-temp-mail/src/*
+2. Add or update database migrations (cloudflare-temp-mail/migrations/*.sql)
+3. Update or add tests (cloudflare-temp-mail/tests/*.ts, *.spec.ts)
+4. Update documentation (cloudflare-temp-mail/docs/*.md, docs/project-changelog.md, docs/deployment-guide.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: cloudflare-temp-mail/src/**/*.ts, cloudflare-temp-mail/migrations/*.sql, cloudflare-temp-mail/tests/**/*.ts
+
+---
+id: chatgpt-creator-instinct-naming-conventions
+trigger: "When creating or renaming files, functions, classes, or constants"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Naming Conventions
+
+## Action
+
+Use camelCase for files and functions, PascalCase for classes, and SCREAMING_SNAKE_CASE for constants
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions
+- Examples in cloudflare-temp-mail/src/* and internal/*
+
+---
+id: chatgpt-creator-instinct-import-style
+trigger: "When importing modules in Go or TypeScript files"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+- Examples in cloudflare-temp-mail/src/*
+
+---
+id: chatgpt-creator-instinct-export-style
+trigger: "When exporting functions or classes from modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+- Examples in cloudflare-temp-mail/src/*
+
+---
+id: chatgpt-creator-instinct-test-file-pattern
+trigger: "When adding or updating test files for TypeScript code"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Test File Pattern
+
+## Action
+
+Name test files with the pattern *.test.ts
+
+## Evidence
+
+- Pattern in testing.filePattern
+- Examples in cloudflare-temp-mail/tests/*.test.ts
+
+---
+id: chatgpt-creator-instinct-test-framework
+trigger: "When writing tests for TypeScript code"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Test Framework
+
+## Action
+
+Use the Vitest framework for unit and integration tests
+
+## Evidence
+
+- Pattern in testing.framework
+- Examples in cloudflare-temp-mail/tests/*.test.ts
+
+---
+id: chatgpt-creator-instinct-go-test-files
+trigger: "When writing tests for Go code"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Go Test Files
+
+## Action
+
+Place tests in *_test.go files alongside the code
+
+## Evidence
+
+- Pattern in workflows.feature-development.filesInvolved
+- Examples in cmd/register/command_test.go
+
+---
+id: chatgpt-creator-instinct-git-commit-format
+trigger: "When composing a git commit message"
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Git Commit Format
+
+## Action
+
+Use conventional commit prefixes: feat, fix, docs, refactor, chore
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Examples: 'feat: harden registration runtime and non-interactive CLI', 'docs: establish project documentation...'
+
+---
+id: chatgpt-creator-instinct-git-commit-length
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Git Commit Length
+
+## Action
+
+Keep the message concise, around 64 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength
+- Examples in commit history
+
+---
+id: chatgpt-creator-instinct-feature-development-with-tests-and-docs
+trigger: "When adding a new capability or major improvement to the codebase"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Feature Development With Tests And Docs
+
+## Action
+
+Implement the feature in source files, add or update corresponding tests, and update or add relevant documentation
+
+## Evidence
+
+- Workflow: feature-development-with-tests-and-docs
+- Commit sequences and files in workflow examples
+
+---
+id: chatgpt-creator-instinct-post-review-hardening-and-bugfix
+trigger: "When fixing issues found during code review or after deployment"
+confidence: 0.92
+domain: workflow
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Post Review Hardening And Bugfix
+
+## Action
+
+Update code to address findings or bugs, update or add regression/unit tests, and synchronize documentation and changelogs
+
+## Evidence
+
+- Workflow: post-review-hardening-and-bugfix
+- Commit sequences and files in workflow examples
+
+---
+id: chatgpt-creator-instinct-documentation-synchronization
+trigger: "When updating project documentation, standards, or integration guides"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Documentation Synchronization
+
+## Action
+
+Edit or add documentation files, synchronize index/metadata files, and optionally update codebase summary or roadmap
+
+## Evidence
+
+- Workflow: documentation-synchronization
+- Commit sequences and files in workflow examples
+
+---
+id: chatgpt-creator-instinct-cloudflare-temp-mail-worker-app-enhancement
+trigger: "When adding a new feature or fix to the Cloudflare temp mail worker app"
+confidence: 0.88
+domain: workflow
+source: repo-analysis
+source_repo: monet88/chatgpt-creator
+---
+
+# Chatgpt Creator Instinct Cloudflare Temp Mail Worker App Enhancement
+
+## Action
+
+Implement or update features in src, add/update migrations, update/add tests, and update documentation
+
+## Evidence
+
+- Workflow: cloudflare-temp-mail-worker-app-enhancement
+- Commit sequences and files in workflow examples
+
