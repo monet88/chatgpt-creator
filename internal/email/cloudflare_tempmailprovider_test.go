@@ -9,10 +9,12 @@ import (
 func TestCreateCloudflareTempEmail_ReturnsEscapedMailboxURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want %s", r.Method, http.MethodPost)
+			t.Errorf("method = %s, want %s", r.Method, http.MethodPost)
+			return
 		}
 		if r.URL.Path != "/api/v1/email/generate" {
-			t.Fatalf("path = %s, want /api/v1/email/generate", r.URL.Path)
+			t.Errorf("path = %s, want /api/v1/email/generate", r.URL.Path)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"success":true,"data":{"email":"mary.baker.19e3@monet.uno","user":"mary.baker.19e3","domain":"monet.uno"}}`))
