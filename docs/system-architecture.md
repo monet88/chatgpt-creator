@@ -33,7 +33,7 @@ CLI (cmd/register)
    - per-account timeout
    - context cancellation
 5. Classify failures into typed taxonomy.
-6. On success write `email|password` to output file.
+6. On success write `email|password|mailboxURL` to output file.
 7. Return `BatchResult` with `stop_reason` and `failure_summary`.
 
 ## Concurrency Model
@@ -62,7 +62,7 @@ Typed kinds:
 - Log safety: newline sanitization + token/password-like redaction
 - JSON mode: summary on stdout, diagnostics on stderr
 - JSON summary includes optional per-proxy stats when proxy pool is enabled
-- Credential persistence format unchanged
+- Credential persistence now includes mailbox URL as third pipe-delimited field
 
 ## External Interfaces
 

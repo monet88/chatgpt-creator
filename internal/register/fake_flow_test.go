@@ -21,14 +21,14 @@ func (f fakeFlowRunner) RunRegisterWithContext(ctx context.Context, emailAddr, p
 	return f.runErr
 }
 
-func baseDeps(t *testing.T, runnerErr error, writeFn func(outputFile, emailAddr, password string) error) batchDependencies {
+func baseDeps(t *testing.T, runnerErr error, writeFn func(outputFile, emailAddr, password, mailboxURL string) error) batchDependencies {
 	t.Helper()
 	return batchDependencies{
 		newClient: func(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (flowRunner, error) {
 			return fakeFlowRunner{runErr: runnerErr}, nil
 		},
-		createTempEmail: func(defaultDomain string) (string, error) {
-			return "alice@example.com", nil
+		createTempEmail: func(defaultDomain string) (emailAddr, mailboxURL string, err error) {
+			return "alice@example.com", "https://generator.email/example.com/alice", nil
 		},
 		generatePassword: func() string {
 			return "generated-password"
@@ -69,7 +69,7 @@ func TestRegisterOne_SuccessWritesCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if string(content) != "alice@example.com|generated-password\n" {
+	if string(content) != "alice@example.com|generated-password|https://generator.email/example.com/alice\n" {
 		t.Fatalf("output content = %q", string(content))
 	}
 }
@@ -88,7 +88,7 @@ func TestRegisterOne_FailuresDoNotWriteCredential(t *testing.T) {
 	for _, tc := range failureCases {
 		t.Run(tc.name, func(t *testing.T) {
 			writeCalled := false
-			deps := baseDeps(t, tc.runErr, func(outputFile, emailAddr, password string) error {
+			deps := baseDeps(t, tc.runErr, func(outputFile, emailAddr, password, mailboxURL string) error {
 				writeCalled = true
 				return nil
 			})
@@ -111,7 +111,7 @@ func TestRegisterOne_FailuresDoNotWriteCredential(t *testing.T) {
 }
 
 func TestRegisterOne_WriteFailureReturnsError(t *testing.T) {
-	deps := baseDeps(t, nil, func(outputFile, emailAddr, password string) error {
+	deps := baseDeps(t, nil, func(outputFile, emailAddr, password, mailboxURL string) error {
 		return errors.New("failed to write to output file")
 	})
 

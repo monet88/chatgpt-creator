@@ -54,7 +54,7 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 		return false, "", WrapFailure("new_client", 0, err)
 	}
 
-	emailAddr, err := deps.createTempEmail(defaultDomain)
+	emailAddr, mailboxURL, err := deps.createTempEmail(defaultDomain)
 	if err != nil {
 		return false, "", WrapFailure("create_temp_email", 0, err)
 	}
@@ -79,7 +79,7 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 	deps.reportProxy(resolvedProxy, true)
 
 	fileMu.Lock()
-	err = deps.writeCredential(outputFile, emailAddr, password)
+	err = deps.writeCredential(outputFile, emailAddr, password, mailboxURL)
 	fileMu.Unlock()
 	if err != nil {
 		return false, emailAddr, NewFailure(FailureOutputWrite, "write_credential", 0, err)
@@ -127,7 +127,7 @@ type ProviderOptions struct {
 	PanelOutputDir string
 	// CreateTempEmail overrides the default temp email creation function.
 	// When set, it replaces the generator.email-based mailbox creation.
-	CreateTempEmail func(domain string) (string, error)
+	CreateTempEmail func(domain string) (emailAddr, mailboxURL string, err error)
 }
 
 // RunBatchForCLIWithProviders is like RunBatchForCLI but accepts optional provider overrides.
@@ -141,12 +141,12 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.createTempEmail = providers.CreateTempEmail
 	}
 	if providers.PhoneProvider != nil {
-		deps.phoneProvider  = providers.PhoneProvider
+		deps.phoneProvider = providers.PhoneProvider
 		deps.viOTPServiceID = providers.ViOTPServiceID
 	}
 	if providers.CodexEnabled {
-		deps.codexEnabled   = true
-		deps.codexOutput    = providers.CodexOutput
+		deps.codexEnabled = true
+		deps.codexOutput = providers.CodexOutput
 		deps.panelOutputDir = providers.PanelOutputDir
 	}
 	if providers.ProxyPool != nil {

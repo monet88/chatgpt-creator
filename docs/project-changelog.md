@@ -1,5 +1,17 @@
 # Project Changelog
 
+## 2026-05-08 — Credential Output Structure Refactor
+
+### Changed
+- `internal/register/dependencies.go` (`appendCredential`): output line format changed from `email|password` to `email|password|mailboxURL`.
+- Temp email creation signature now consistently returns `(emailAddr, mailboxURL, err)` across provider paths used by batch registration.
+- `internal/email/generator.go` (`CreateTempEmail`): when `defaultDomain` is set, mailbox URL is intentionally empty (`""`) because custom domains may not map to a `generator.email` mailbox URL.
+- `internal/email/cloudflare_tempmailprovider.go` (`CreateCloudflareTempEmail`): mailbox URL now points to Worker inbox hash route as `<baseURL>/#<url-escaped-email>`.
+
+### Validation
+- `go test ./...` (133 passed in 11 packages)
+- `go build ./...`
+
 ## 2026-05-08 — Web UI, Panel Token Writer, OTP Flow Hardening
 
 ### Added

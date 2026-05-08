@@ -265,7 +265,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				otpProvider = email.NewCloudflareTempMailProvider(effectiveCloudflareMailURL, effectiveCloudflareMailToken)
 			}
 
-			var cloudflareCreateEmail func(string) (string, error)
+			var cloudflareCreateEmail func(string) (emailAddr, mailboxURL string, err error)
 			if !usingIMAPOTP && effectiveCloudflareMailURL != "" {
 				cloudflareCreateEmail = email.CreateCloudflareTempEmail(effectiveCloudflareMailURL, effectiveCloudflareMailToken)
 			}
