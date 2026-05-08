@@ -1,9 +1,54 @@
 # ViOTP API Documentation
 
-> ⚠️ **Runtime status (safe mode): unsupported**
-> - Tài liệu này chỉ để tham khảo API ViOTP.
-> - Batch runtime hiện tại fail-closed khi nhận `viotp_token` hoặc `viotp_service_id`.
-> - Phone challenge hiện là detection-only (`phone_challenge`), không tự động thuê số/nhận OTP qua ViOTP.
+> ✅ **Runtime status: active**
+> - ViOTP wired vào registration flow. Phone challenge tự động thuê số và nhận OTP.
+> - Config: `VIOTP_TOKEN` + `VIOTP_SERVICE_ID` trong `.env` hoặc `--viotp-token` / `--viotp-service-id` CLI flags.
+> - **Service ID cho OpenAI | ChatGPT: `1234` (2200 VND/số, SIM Việt Nam)**
+> - Số điện thoại Việt Nam (`country=vn`) — dùng mặc định, không cần truyền `country`.
+
+## Quick Reference — Service IDs dùng thường xuyên
+
+| Service | ID | Giá (VND) | Ghi chú |
+|---|---|---|---|
+| OpenAI \| ChatGPT | **1234** | 2200 | Dùng cho registration flow |
+| Claude AI | 1274 | 1600 | |
+| Anthropic (Claude AI) | 1276 | 1600 | |
+| Gmail/Google | 3 | 2000 | |
+| Hotmail/Outlook/Azure | 5 | 1600 | |
+| Facebook | 7 | 1600 | |
+| Telegram | 19 | 5000 | |
+| Discord | 200 | 1600 | |
+
+## Cách tra service ID nhanh
+
+```bash
+# Dump toàn bộ danh sách dịch vụ VN ra file rồi grep
+curl -s "https://api.viotp.com/service/getv2?token=$VIOTP_TOKEN&country=vn" \
+  -o /tmp/viotp_services.json
+
+# Tìm service theo tên
+python3 -c "
+import json
+with open('/tmp/viotp_services.json') as f:
+    services = json.load(f)['data']
+keyword = 'openai'  # đổi keyword ở đây
+for s in services:
+    if keyword.lower() in s['name'].lower():
+        print(f\"{s['id']:5d}  {s['name']:40s}  {s['price']} VND\")
+"
+```
+
+> **Lưu ý parse**: Response của API chứa ký tự control gây lỗi `json.decoder.JSONDecodeError`.
+> Phải dùng `curl -o file.json` lưu file trước, rồi parse file — **không pipe trực tiếp qua python**.
+
+## Country codes
+
+| Code | Quốc gia | Nhà mạng |
+|---|---|---|
+| `vn` (mặc định) | Việt Nam | MOBIFONE, VINAPHONE, VIETTEL, VIETNAMOBILE, ITELECOM, WINTEL |
+| `la` | Lào | UNITEL, ETL, BEELINE, LAOTEL |
+
+---
 
 > **Lưu ý !**
 > - Sử dụng giao thức GET cho mọi truy vấn.
