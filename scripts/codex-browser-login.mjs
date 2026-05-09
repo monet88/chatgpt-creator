@@ -227,12 +227,25 @@ async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpSer
       continue;
     }
 
-    await waitUrl(
-      camo, tabId, userId,
-      async () => JSON.stringify(await snap(camo, tabId, userId)).includes('one-time-code'),
-      35_000,
-    );
-    const smsCode = await waitForSmsOTP(viotpToken, phone.request_id);
+    // Wait for OTP input to appear; if OpenAI rejects late, catch and retry.
+    try {
+      await waitUrl(
+        camo, tabId, userId,
+        async () => JSON.stringify(await snap(camo, tabId, userId)).includes('one-time-code'),
+        35_000,
+      );
+    } catch (waitErr) {
+      console.log(`[phone] number likely rejected (late): ${waitErr.message}`);
+      if (attempt + 1 < maxRetries) continue;
+      throw new Error(`Phone verification failed after ${maxRetries} attempts (last: ${waitErr.message})`);
+    }
+
+    let smsCode;
+    try {
+      smsCode = await waitForSmsOTP(viotpToken, phone.request_id);
+    } catch (smsErr) {
+      throw new Error(`Phone verification failed after number was accepted: ${smsErr.message}`);
+    }
     console.log('[phone] SMS OTP received');
     await typeInto(camo, tabId, userId, 'input[autocomplete="one-time-code"]', smsCode);
     await clickEl(camo, tabId, userId, 'button[type="submit"]');

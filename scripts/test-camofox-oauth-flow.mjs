@@ -110,17 +110,35 @@ function startCallbackServer(timeout = 120_000) {
           const code = u.searchParams.get('code');
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end('<h1>OK — code received</h1>');
-          server.close();
-          if (code) resolve(code);
-          else reject(new Error('Callback missing code param'));
+          if (code) finish(code);
+          else fail(new Error('Callback missing code param'));
         } else {
           res.writeHead(404); res.end();
         }
       } catch { res.writeHead(500); res.end(); }
     });
-    server.listen(1455, '127.0.0.1');
-    setTimeout(() => { server.close(); reject(new Error('OAuth callback timeout')); }, timeout);
+    let settled = false;
+    let timeoutId;
+    const close = done => {
+      if (server.listening) server.close(done);
+      else done();
+    };
+    const finish = code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      close(() => resolve(code));
+    };
+    const fail = err => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      close(() => reject(err));
+    };
+    server.on('error', fail);
     server.on('listening', () => console.log('[callback] :1455 ready'));
+    server.listen(1455, '127.0.0.1');
+    timeoutId = setTimeout(() => fail(new Error('OAuth callback timeout')), timeout);
   });
 }
 
@@ -162,9 +180,8 @@ async function main() {
   if (!health) { console.error('[error] camofox server not reachable at :9377'); process.exit(1); }
   console.log('[server] OK port=9377');
 
-  // No local server — poll tab URL until it hits localhost:1455
-  // (port 1455 may be occupied; we just capture code from the URL before/during navigation)
-  const codePromise = null; // unused
+  // Start local callback server to capture OAuth code (primary method).
+  const codePromise = startCallbackServer(120_000);
 
   // Build PKCE + auth URL
   const { verifier, challenge } = generatePKCE();
@@ -265,19 +282,31 @@ async function main() {
     await shot(tabId, '08-after-consent');
   }
 
-  // Poll tab URL until it navigates to localhost:1455 (OAuth callback)
-  console.log('[flow] polling for OAuth callback URL...');
+  // Wait for OAuth code — prefer callback server, fallback to URL polling/snapshot.
+  console.log('[flow] waiting for OAuth code (callback server + URL polling)...');
   let code;
+
+  // Race: callback server vs URL polling
+  const urlPollPromise = (async () => {
+    try {
+      const callbackUrl = await waitUrl(
+        tabId,
+        url => url.includes('localhost:1455') && url.includes('code='),
+        90_000,
+      );
+      return new URL(callbackUrl).searchParams.get('code');
+    } catch {
+      return null;
+    }
+  })();
+
   try {
-    const callbackUrl = await waitUrl(
-      tabId,
-      url => url.includes('localhost:1455') && url.includes('code='),
-      90_000,
-    );
-    console.log('[flow] callback URL detected');
-    code = new URL(callbackUrl).searchParams.get('code');
+    code = await Promise.any([
+      codePromise.then(c => { console.log('[flow] code received via callback server'); return c; }),
+      urlPollPromise.then(c => { if (!c) throw new Error('poll empty'); console.log('[flow] code captured via URL polling'); return c; }),
+    ]);
   } catch {
-    // Fallback: extract from snapshot text (camofox may show error page with URL in body)
+    // Last resort: extract from snapshot text
     const s = await snap(tabId);
     await shot(tabId, '09-final-state');
     const snapStr = JSON.stringify(s);
@@ -287,7 +316,7 @@ async function main() {
       console.log('[flow] code extracted from snapshot text');
     } else {
       console.log('[flow] OAuth code not captured');
-      console.log('[result] PARTIAL — camofox navigates/fills correctly, need route interception for code');
+      console.log('[result] PARTIAL — camofox navigates/fills correctly, callback server did not receive code');
       process.exit(0);
     }
   }
