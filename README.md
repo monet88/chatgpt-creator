@@ -6,8 +6,8 @@ Batch ChatGPT account registration with OTP automation, rotating proxies, Codex 
 
 - Language: Go + Node.js (Codex login script)
 - Entry point: `cmd/register/main.go`
-- Modes: non-interactive flags, interactive fallback
-- Output formats: `email|password|mailbox_url` credentials, per-account panel JSON
+- Modes: web UI (`serve`), non-interactive flags, interactive fallback
+- Output formats: `email|password|mailbox_url` credentials, optional Codex token JSON, per-account panel JSON
 
 ## Prerequisites
 
@@ -121,7 +121,7 @@ done < accounts/cre/accounts.txt
   - `--viotp-token` / `--viotp-service-id` — ViOTP SMS provider
   - `--codex` — enable post-registration Codex OAuth token extraction
   - `--codex-output` — optional JSON array file for Codex tokens
-  - `--panel-output` — directory for per-account panel JSON; defaults to `accounts/tokens/` when `--codex` is enabled
+  - `--panel-output` — directory for per-account `codex-{email}-{plan}.json` files; defaults to `accounts/tokens/` when `--codex` is enabled
 
 ## Proxy Setup
 
@@ -176,6 +176,13 @@ Temp-mail API (mail.monet.uno):
 - OTP endpoint: `GET /api/v1/email/{domain}/{user}/otp`
 - Messages: `GET /api/v1/email/{domain}/{user}/messages`
 
+## Validation
+
+- `--total > 0`
+- `--workers > 0`
+- password length `>= 12` when provided
+- empty output path resolves to `accounts/cre/<datetime>.txt`
+
 ## Workflow: Full Codex Token Extraction
 
 **When doing this in a fresh session, follow these steps:**
@@ -206,7 +213,7 @@ node scripts/codex-browser-login.mjs \
 
 ### Credential file
 
-Appended to `accounts/cre/<datetime>.txt` by default.
+On success, credentials are appended to `accounts/cre/<datetime>.txt` by default. An explicit `--output` path is used exactly; a trailing directory path writes `<datetime>.txt` inside that directory.
 
 ```text
 email|password|mailbox_url
@@ -227,7 +234,27 @@ email|password|mailbox_url
 
 ### JSON summary (`--json`)
 
-JSON summary → **stdout**, logs → **stderr**.
+- JSON summary is written to **stdout**
+- Diagnostics/progress logs are written to **stderr**
+- Summary excludes credentials, tokens, cookies, and raw sensitive payloads
+
+Example shape:
+
+```json
+{
+  "target": 10,
+  "success": 10,
+  "attempts": 13,
+  "failures": 3,
+  "elapsed": "2m 11s",
+  "stop_reason": "target_reached",
+  "output_file": "accounts/cre/20260508-152809.txt",
+  "failure_summary": {
+    "unsupported_email": 2,
+    "otp_timeout": 1
+  }
+}
+```
 
 ## Runtime Safety
 
