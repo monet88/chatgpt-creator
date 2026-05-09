@@ -86,5 +86,5 @@ npm --prefix cloudflare-temp-mail run dev
 
 ## API Contract Reference
 
-- Worker API contract: `cloudflare-temp-mail/docs/api-contract.md`
+- Worker API contract: `docs/api-contract.md`
 - Integration boundary rule: consuming systems should use HTTP endpoints only, not Worker internals.

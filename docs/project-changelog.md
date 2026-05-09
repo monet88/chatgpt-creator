@@ -79,7 +79,7 @@
 ### Changed
 - Updated `docs/codebase-summary.md` to reflect dual-product repository structure (Go CLI + standalone Worker app).
 - Updated `docs/project-overview-pdr.md`, `docs/system-architecture.md`, `docs/code-standards.md`, `docs/deployment-guide.md`, and `docs/testing-guide.md` with Worker-specific scope and validation commands.
-- Confirmed API contract location and integration boundary in `cloudflare-temp-mail/docs/api-contract.md`.
+- Confirmed API contract location and integration boundary in `docs/api-contract.md`.
 
 ### Validation
 - `npm --prefix cloudflare-temp-mail run build`

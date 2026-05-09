@@ -7,7 +7,7 @@
 1. Root Go CLI for batch account registration (`cmd/register`, `internal/*`).
 2. Standalone `cloudflare-temp-mail` Cloudflare Workers app for temp mailbox API/UI (`cloudflare-temp-mail/`).
 
-The Worker app is independently deployable and should be integrated through its HTTP API contract (`cloudflare-temp-mail/docs/api-contract.md`) rather than by importing internals.
+The Worker app is independently deployable and should be integrated through its HTTP API contract (`docs/api-contract.md`) rather than by importing internals.
 
 ## Product Goals
 
@@ -53,7 +53,7 @@ The Worker app is independently deployable and should be integrated through its 
 
 ## Acceptance Criteria
 
-- User runs `go run cmd/register/main.go` and can complete prompt flow.
+- User runs `go run ./cmd/register` and can complete prompt flow.
 - For `totalAccounts = N`, summary reports `Success: N` after retries.
 - Output file contains exactly one `email|password|mailboxURL` line per success (mailboxURL can be empty when custom domains are used outside generator-backed mailboxes).
 - With empty `output_file`, runtime writes credentials to `accounts/cre/<datetime>.txt`.

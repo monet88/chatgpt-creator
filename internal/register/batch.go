@@ -30,7 +30,7 @@ func defaultBatchOptions(totalAccounts int) BatchOptions {
 	return BatchOptions{
 		MaxAttempts:            maxAttempts,
 		MaxConsecutiveFailures: totalAccounts,
-		PerAccountTimeout:      90 * time.Second,
+		PerAccountTimeout:      3 * time.Minute,
 		RetryBaseDelay:         500 * time.Millisecond,
 		PacingProfile:          PacingHuman,
 	}
@@ -268,11 +268,13 @@ func RunBatchWithOptions(ctx context.Context, totalAccounts int, outputFile stri
 					diagnosticPrintf("[%s] [W%d] ✓ SUCCESS: %s\n", ts, workerID, safeLogMessage(emailAddr))
 					printMu.Unlock()
 
-					// Pacing delay between registrations
-					if delay := pacingDelay(options.PacingProfile); delay > 0 {
-						if err := waitWithContext(ctx, delay); err != nil {
-							setStop(StopReasonContextCancelled)
-							return
+					// Pacing delay between registrations — skip when no work remains
+					if atomic.LoadInt64(&remaining) > 0 {
+						if delay := pacingDelay(options.PacingProfile); delay > 0 {
+							if err := waitWithContext(ctx, delay); err != nil {
+								setStop(StopReasonContextCancelled)
+								return
+							}
 						}
 					}
 					continue
