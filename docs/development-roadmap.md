@@ -37,3 +37,4 @@ _Last updated: 2026-05-07_
 - Keep integration behavior stable as upstream contracts evolve.
 - Maintain standalone Worker API contract alignment (`docs/api-contract.md`) as routes evolve.
 - Add targeted integration safety tests when external endpoint behavior changes.
+- Add 2FA/TOTP config JSON, environment variable, and web `serve` `JobConfig` surfaces after the CLI-only implementation ships.
