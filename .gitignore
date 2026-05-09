@@ -17,7 +17,10 @@ docs/codex_token/
 .tokensave
 .gitnexus
 .claude
-plans
+plans/*
+!plans/260509-1526-codex-login-camoufox-rewrite/
+plans/260509-1526-codex-login-camoufox-rewrite/*
+!plans/260509-1526-codex-login-camoufox-rewrite/plan.md
 .neuralmemory
 repomix-output.xml
 release-manifest.json
