@@ -22,7 +22,7 @@ This repository currently exposes a CLI workflow. Documentation should optimize 
 ## Example Quality Bar
 
 Use examples that are currently runnable:
-- `go run cmd/register/main.go`
+- `go run ./cmd/register`
 - `config.json` keys: `proxy`, `output_file`, `default_password`, `default_domain`
 
 Avoid documenting unimplemented flags, APIs, or automation pipelines.

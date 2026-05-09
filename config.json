@@ -1,6 +1,6 @@
 {
   "proxy": "",
-  "output_file": "results.txt",
+  "output_file": "",
   "default_password": "",
   "default_domain": "monet.uno"
 }
