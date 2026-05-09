@@ -13,11 +13,10 @@ import (
 )
 
 const (
-	defaultAuthBaseURL = "https://auth0.openai.com"
-	defaultClientID    = "DRivsnm2Mu42T3KOpqdtwB3NYviHYzwD" // Codex CLI public client
-	defaultAudience    = "https://api.openai.com/v1"
-	defaultRedirectURI = "http://127.0.0.1:22122/callback"
-	defaultScope       = "openid profile email offline_access"
+	defaultAuthBaseURL = "https://auth.openai.com"
+	defaultClientID    = "app_EMoamEEZ73f0CkXaXp7hrann"
+	defaultRedirectURI = "http://127.0.0.1:1455/auth/callback"
+	defaultScope       = "openid email profile offline_access"
 )
 
 // TokenResult holds the tokens obtained from the OAuth flow.
@@ -33,7 +32,6 @@ type TokenResult struct {
 type SSOConfig struct {
 	AuthBaseURL string
 	ClientID    string
-	Audience    string
 	RedirectURI string
 	Scope       string
 }
@@ -43,25 +41,25 @@ func DefaultSSOConfig() SSOConfig {
 	return SSOConfig{
 		AuthBaseURL: defaultAuthBaseURL,
 		ClientID:    defaultClientID,
-		Audience:    defaultAudience,
 		RedirectURI: defaultRedirectURI,
 		Scope:       defaultScope,
 	}
 }
 
-// BuildAuthorizeURL constructs the OAuth2 /authorize URL with PKCE parameters.
+// BuildAuthorizeURL constructs the OAuth2 /oauth/authorize URL with PKCE parameters.
 func BuildAuthorizeURL(cfg SSOConfig, pkce *PKCE, state string) string {
 	params := url.Values{
-		"response_type":         {"code"},
-		"client_id":             {cfg.ClientID},
-		"redirect_uri":          {cfg.RedirectURI},
-		"scope":                 {cfg.Scope},
-		"audience":              {cfg.Audience},
-		"state":                 {state},
-		"code_challenge":        {pkce.Challenge},
-		"code_challenge_method": {pkce.Method},
+		"response_type":              {"code"},
+		"client_id":                  {cfg.ClientID},
+		"redirect_uri":               {cfg.RedirectURI},
+		"scope":                      {cfg.Scope},
+		"state":                      {state},
+		"code_challenge":             {pkce.Challenge},
+		"code_challenge_method":      {pkce.Method},
+		"id_token_add_organizations": {"true"},
+		"codex_cli_simplified_flow":  {"true"},
 	}
-	return cfg.AuthBaseURL + "/authorize?" + params.Encode()
+	return cfg.AuthBaseURL + "/oauth/authorize?" + params.Encode()
 }
 
 // InterceptCallback starts a temporary HTTP server to capture the OAuth callback.
@@ -71,7 +69,7 @@ func InterceptCallback(ctx context.Context, listenAddr string, expectedState str
 	errCh := make(chan error, 1)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+	callbackHandler := func(w http.ResponseWriter, r *http.Request) {
 		state := r.URL.Query().Get("state")
 		if state != expectedState {
 			http.Error(w, "state mismatch", http.StatusBadRequest)
@@ -97,7 +95,9 @@ func InterceptCallback(ctx context.Context, listenAddr string, expectedState str
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<html><body><h1>Authorization successful</h1><p>You can close this window.</p></body></html>")
 		codeCh <- code
-	})
+	}
+	mux.HandleFunc("/auth/callback", callbackHandler)
+	mux.HandleFunc("/callback", callbackHandler)
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
@@ -129,11 +129,9 @@ func InterceptCallback(ctx context.Context, listenAddr string, expectedState str
 	}
 }
 
-// StartCallbackInterceptor binds a local listener at an ephemeral port, returning the
-// redirect URI to embed in the authorize URL and a wait function that blocks until the
-// OAuth callback delivers a code, times out, or the context is cancelled.
-// The listener is bound synchronously so callers can build the authorize URL and visit it
-// immediately without any sleep-based synchronization.
+// StartCallbackInterceptor binds a local listener on an OS-assigned ephemeral port,
+// returning the redirect URI and a wait function. Each concurrent worker gets its own
+// port, eliminating fixed-port conflicts with other processes.
 func StartCallbackInterceptor(ctx context.Context, expectedState string, timeout time.Duration) (redirectURI string, wait func() (string, error), err error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -141,13 +139,13 @@ func StartCallbackInterceptor(ctx context.Context, expectedState string, timeout
 	}
 
 	port := listener.Addr().(*net.TCPAddr).Port
-	redirectURI = fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+	redirectURI = fmt.Sprintf("http://127.0.0.1:%d/auth/callback", port)
 
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
 		state := r.URL.Query().Get("state")
 		if state != expectedState {
 			http.Error(w, "state mismatch", http.StatusBadRequest)
@@ -233,6 +231,7 @@ func ExchangeCode(ctx context.Context, cfg SSOConfig, code string, verifier stri
 		return nil, fmt.Errorf("sso: failed to create token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)

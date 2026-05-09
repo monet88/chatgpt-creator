@@ -9,6 +9,11 @@ chatgpt-creator
 results.txt
 blacklist.json
 results.txt
+accounts/
+codex-tokens/
+agent_workspace/
+test_accounts.txt
+docs/codex_token/
 .tokensave
 .gitnexus
 .claude

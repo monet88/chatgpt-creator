@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Node.js ESM replacement for codex_browser_login.py.
+// Node.js ESM Codex browser-login flow.
 // Uses camofox REST API (redf0x1/camofox-browser) at localhost:9377 — zero npm deps.
 import { randomBytes, createHash, createHmac } from 'node:crypto';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -85,11 +85,17 @@ async function api(camo, method, path, body) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const text = await r.text();
-  try { return JSON.parse(text); } catch { return { raw: text }; }
+  let payload;
+  try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
+  if (!r.ok) {
+    const message = typeof payload?.error === 'string' ? payload.error : text.slice(0, 300);
+    throw new Error(`${method} ${path} failed (${r.status}): ${message}`);
+  }
+  return payload;
 }
 
 async function getTabUrl(camo, tabId, userId) {
-  const r   = await api(camo, 'GET', `/tabs?userId=${userId}`);
+  const r   = await api(camo, 'GET', `/tabs?userId=${encodeURIComponent(userId)}`);
   const tab = (r.tabs || []).find(t => t.id === tabId || t.tabId === tabId);
   return tab?.url || '';
 }
@@ -98,7 +104,7 @@ async function waitUrl(camo, tabId, userId, predicate, timeout = 60_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const url = await getTabUrl(camo, tabId, userId);
-    if (predicate(url)) return url;
+    if (await predicate(url)) return url;
     await new Promise(r => setTimeout(r, 1500));
   }
   throw new Error(`waitUrl timeout after ${timeout}ms`);
@@ -117,7 +123,27 @@ async function clickEl(camo, tabId, userId, selector) {
 }
 
 async function snap(camo, tabId, userId) {
-  return api(camo, 'GET', `/tabs/${tabId}/snapshot?userId=${userId}`);
+  return api(camo, 'GET', `/tabs/${tabId}/snapshot?userId=${encodeURIComponent(userId)}`);
+}
+
+function parseProxy(proxyUrl) {
+  if (!proxyUrl) return null;
+  let parsed;
+  try {
+    parsed = new URL(proxyUrl);
+  } catch {
+    throw new Error('--proxy must be a URL, e.g. http://user:pass@host:port');
+  }
+  const port = Number(parsed.port);
+  if (!parsed.hostname || !Number.isInteger(port) || port <= 0) {
+    throw new Error('--proxy must include host and port');
+  }
+  return {
+    host: parsed.hostname,
+    port,
+    ...(parsed.username ? { username: decodeURIComponent(parsed.username) } : {}),
+    ...(parsed.password ? { password: decodeURIComponent(parsed.password) } : {}),
+  };
 }
 
 // ── mail OTP helpers ──────────────────────────────────────────────────────────
@@ -181,13 +207,13 @@ async function waitForSmsOTP(token, requestId, timeout = 120) {
 async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const phone = await rentPhone(viotpToken, viotpServiceId);
-    console.log(`[phone] rented +${phone.countryCode}${phone.phone_number} (attempt ${attempt + 1})`);
+    console.log(`[phone] rented number ending ${String(phone.phone_number).slice(-4)} (attempt ${attempt + 1})`);
 
     // Select Vietnam +84
     await api(camo, 'POST', `/tabs/${tabId}/select`, {
       userId, selector: 'select[name="countryCode"], select[id*="country"]',
       value: 'VN',
-    }).catch(() => {});
+    });
 
     await typeInto(camo, tabId, userId, 'input[type="tel"], input[name="phone"]', phone.phone_number);
     await clickEl(camo, tabId, userId, 'button[type="submit"]');
@@ -201,7 +227,11 @@ async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpSer
       continue;
     }
 
-    // Wait for SMS OTP input to appear (number accepted)
+    await waitUrl(
+      camo, tabId, userId,
+      async () => JSON.stringify(await snap(camo, tabId, userId)).includes('one-time-code'),
+      35_000,
+    );
     const smsCode = await waitForSmsOTP(viotpToken, phone.request_id);
     console.log('[phone] SMS OTP received');
     await typeInto(camo, tabId, userId, 'input[autocomplete="one-time-code"]', smsCode);
@@ -214,11 +244,16 @@ async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpSer
 // ── main browser flow ─────────────────────────────────────────────────────────
 
 async function doBrowserLogin(opts) {
-  const { camo, userId, email, authorizeUrl, password, totpSecret,
+  const { camo, userId, email, authorizeUrl, password, totpSecret, proxy,
           mailUrl, mailToken, viotpToken, viotpServiceId } = opts;
 
   console.log('[browser] navigating to authorize URL...');
-  const opened = await api(camo, 'POST', '/tabs', { userId, sessionKey: 'default', url: authorizeUrl });
+  const opened = await api(camo, 'POST', '/tabs', {
+    userId,
+    sessionKey: 'default',
+    url: authorizeUrl,
+    ...(proxy ? { proxy: parseProxy(proxy), geoMode: 'proxy-locked' } : {}),
+  });
   const tabId  = opened.tabId || opened.id;
   if (!tabId) throw new Error(`no tabId in response: ${JSON.stringify(opened)}`);
   console.log(`[browser] tabId=${tabId}`);
@@ -268,7 +303,7 @@ async function doBrowserLogin(opts) {
       console.log('[browser] TOTP step');
       for (let attempt = 0; attempt <= 2; attempt++) {
         const totp = generateTOTP(totpSecret);
-        console.log(`[browser] TOTP attempt ${attempt + 1}, code=${totp}`);
+        console.log(`[browser] TOTP attempt ${attempt + 1}`);
         await typeInto(camo, tabId, userId, 'input[autocomplete="one-time-code"], input[name="code"]', totp);
         await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"]');
         await new Promise(r => setTimeout(r, 3000));
@@ -286,7 +321,7 @@ async function doBrowserLogin(opts) {
     if ((url.includes('add-phone') || url.includes('phone-verification')) && viotpToken) {
       console.log('[browser] phone verification step');
       await handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId);
-      await waitUrl(camo, tabId, userId, u => !u.includes('phone'), 30_000).catch(() => {});
+      await waitUrl(camo, tabId, userId, u => !u.includes('phone'), 30_000);
       url = await getTabUrl(camo, tabId, userId);
       console.log(`[browser] post-phone url: ${url}`);
     }
@@ -298,7 +333,7 @@ async function doBrowserLogin(opts) {
       await clickEl(camo, tabId, userId,
         'button[type="submit"], button:has-text("Allow"), button:has-text("Authorize"), button:has-text("Continue")'
       );
-      await waitUrl(camo, tabId, userId, u => !u.includes('consent'), 30_000).catch(() => {});
+      await waitUrl(camo, tabId, userId, u => !u.includes('consent'), 30_000);
     }
 
     // Capture OAuth code via URL polling (primary) or snapshot fallback
@@ -310,7 +345,7 @@ async function doBrowserLogin(opts) {
         u => u.includes('localhost:1455') && u.includes('code='),
         90_000,
       );
-      console.log(`[browser] callback URL: ${callbackUrl.slice(0, 80)}`);
+      console.log('[browser] callback URL captured');
       code = new URL(callbackUrl).searchParams.get('code');
     } catch {
       const s = await snap(camo, tabId, userId);
@@ -322,7 +357,7 @@ async function doBrowserLogin(opts) {
     return code;
 
   } finally {
-    await api(camo, 'DELETE', `/tabs/${tabId}?userId=${userId}`).catch(() => {});
+    await api(camo, 'DELETE', `/tabs/${tabId}`, { userId }).catch(() => {});
   }
 }
 
@@ -340,7 +375,11 @@ async function exchangeCode(code, verifier) {
       code_verifier: verifier,
     }).toString(),
   });
-  return r.json();
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(`status=${r.status} error=${body.error || 'unknown'}`);
+  }
+  return body;
 }
 
 function parseIdToken(idToken) {
@@ -436,6 +475,7 @@ async function main() {
       camo, userId, email, authorizeUrl,
       password:       values.password,
       totpSecret:     values['totp-secret'],
+      proxy:          values.proxy,
       mailUrl:        values['mail-url'],
       mailToken:      values['mail-token'],
       viotpToken:     values['viotp-token'],
@@ -456,7 +496,7 @@ async function main() {
   }
 
   if (!tokens.access_token) {
-    console.error(`[codex-login] FAILED (token exchange): ${JSON.stringify(tokens)}`);
+    console.error(`[codex-login] FAILED (token exchange): missing access_token`);
     process.exit(1);
   }
 

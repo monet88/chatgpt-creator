@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **chatgpt-creator** (2177 symbols, 4054 relationships, 187 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **chatgpt-creator** (2416 symbols, 4394 relationships, 200 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -76,7 +76,7 @@ Two independent workflows:
 VIOTP_TOKEN=<token>
 VIOTP_SERVICE_ID=1234
 
-# Load before running Python script:
+# Load before running Codex token extraction:
 export $(grep -v '^#' .env | xargs)
 ```
 
@@ -140,7 +140,7 @@ Output: `codex-tokens/codex-{email}-{plan}-{hash}.json`
 | Password + TOTP | Fills password, then TOTP (RFC 6238 SHA-1); retries with next 30s window on clock skew |
 | Phone required | Rents VN number from ViOTP service 1234; selects Vietnam (+84); retries up to 3× if OpenAI rejects number |
 | Consent page | Auto-clicks Continue on `auth.openai.com/sign-in-with-chatgpt/codex/consent` |
-| OAuth code | Polls tab URL until `localhost:1455?code=` appears (90s); snapshot text fallback |
+| OAuth code | Polls tab URL until localhost callback includes `code=` (90s); snapshot text fallback |
 | camofox server | Auto-installs `camofox-browser` globally + auto-starts server if not running |
 
 ### Timeouts
@@ -159,7 +159,7 @@ Output: `codex-tokens/codex-{email}-{plan}-{hash}.json`
 # Flag (Go)
 --proxy http://user:pass@host:port
 
-# Flag (Python script)
+# Flag (Node.js script)
 --proxy http://user:pass@host:port
 ```
 
