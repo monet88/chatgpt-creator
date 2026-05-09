@@ -114,6 +114,17 @@ async function waitNet(camo, tabId, userId, timeout = 6000) {
   return api(camo, 'POST', `/tabs/${tabId}/wait`, { userId, timeout, waitForNetwork: true });
 }
 
+function isTotpChallengeUrl(url) {
+  let route = url.split(/[?#]/, 1)[0];
+  try {
+    route = new URL(url).pathname;
+  } catch {
+    // Fall back to the query-free string for non-absolute tab URLs.
+  }
+  const normalizedRoute = route.toLowerCase();
+  return normalizedRoute.includes('mfa') || normalizedRoute.includes('totp') || normalizedRoute.includes('2fa');
+}
+
 async function typeInto(camo, tabId, userId, selector, text) {
   return api(camo, 'POST', `/tabs/${tabId}/type`, { userId, selector, text });
 }
@@ -312,7 +323,7 @@ async function doBrowserLogin(opts) {
 
     // TOTP step — retry with next 30s window on clock skew (max 2 retries)
     url = await getTabUrl(camo, tabId, userId);
-    if ((url.includes('mfa') || url.includes('totp') || url.includes('2fa')) && totpSecret) {
+    if (isTotpChallengeUrl(url) && totpSecret) {
       console.log('[browser] TOTP step');
       for (let attempt = 0; attempt <= 2; attempt++) {
         const totp = generateTOTP(totpSecret);
@@ -321,7 +332,7 @@ async function doBrowserLogin(opts) {
         await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"]');
         await new Promise(r => setTimeout(r, 3000));
         url = await getTabUrl(camo, tabId, userId);
-        if (!url.includes('mfa') && !url.includes('totp')) break;
+        if (!isTotpChallengeUrl(url)) break;
         // Wait for next 30s TOTP window before retry
         const msToNext = 30_000 - (Date.now() % 30_000);
         console.log(`[browser] TOTP failed, waiting ${Math.ceil(msToNext / 1000)}s for next window...`);

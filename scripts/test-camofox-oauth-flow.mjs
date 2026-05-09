@@ -102,7 +102,8 @@ async function waitUrl(tabId, predicate, timeout = 60000) {
 // ── OAuth callback server ────────────────────────────────────────────────────
 
 function startCallbackServer(timeout = 120_000) {
-  return new Promise((resolve, reject) => {
+  let cancel = () => {};
+  const promise = new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       try {
         const u = new URL(req.url, 'http://localhost:1455');
@@ -118,10 +119,19 @@ function startCallbackServer(timeout = 120_000) {
       } catch { res.writeHead(500); res.end(); }
     });
     let settled = false;
+    let listenFailed = false;
     let timeoutId;
     const close = done => {
-      if (server.listening) server.close(done);
-      else done();
+      if (server.listening) {
+        server.close(done);
+        return;
+      }
+      if (listenFailed) {
+        done();
+        return;
+      }
+      server.once('listening', () => server.close(done));
+      server.once('error', () => done());
     };
     const finish = code => {
       if (settled) return;
@@ -135,11 +145,21 @@ function startCallbackServer(timeout = 120_000) {
       clearTimeout(timeoutId);
       close(() => reject(err));
     };
-    server.on('error', fail);
+    cancel = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      close(() => {});
+    };
+    server.on('error', err => {
+      listenFailed = true;
+      fail(err);
+    });
     server.on('listening', () => console.log('[callback] :1455 ready'));
     server.listen(1455, '127.0.0.1');
     timeoutId = setTimeout(() => fail(new Error('OAuth callback timeout')), timeout);
   });
+  return { promise, cancel };
 }
 
 // ── token exchange ────────────────────────────────────────────────────────────
@@ -181,7 +201,7 @@ async function main() {
   console.log('[server] OK port=9377');
 
   // Start local callback server to capture OAuth code (primary method).
-  const codePromise = startCallbackServer(120_000);
+  const callbackServer = startCallbackServer(120_000);
 
   // Build PKCE + auth URL
   const { verifier, challenge } = generatePKCE();
@@ -302,7 +322,7 @@ async function main() {
 
   try {
     code = await Promise.any([
-      codePromise.then(c => { console.log('[flow] code received via callback server'); return c; }),
+      callbackServer.promise.then(c => { console.log('[flow] code received via callback server'); return c; }),
       urlPollPromise.then(c => { if (!c) throw new Error('poll empty'); console.log('[flow] code captured via URL polling'); return c; }),
     ]);
   } catch {
@@ -319,6 +339,8 @@ async function main() {
       console.log('[result] PARTIAL — camofox navigates/fills correctly, callback server did not receive code');
       process.exit(0);
     }
+  } finally {
+    callbackServer.cancel();
   }
 
   // Exchange code for tokens

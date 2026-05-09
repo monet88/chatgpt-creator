@@ -26,8 +26,6 @@ future agent-assisted work.
 - `templates/`: reusable spec-intake, story, plan, decision, and validation
   formats.
 - `journals/`: dated technical notes from completed work.
-- `proxy/`: proxy provider references and credentials guidance. Redact secrets
-  before quoting.
 
 ## Current State
 
