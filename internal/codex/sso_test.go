@@ -62,10 +62,10 @@ func TestBuildAuthorizeURL(t *testing.T) {
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	if parsed.Host != "auth0.openai.com" {
+	if parsed.Host != "auth.openai.com" {
 		t.Fatalf("Host = %q", parsed.Host)
 	}
-	if parsed.Path != "/authorize" {
+	if parsed.Path != "/oauth/authorize" {
 		t.Fatalf("Path = %q", parsed.Path)
 	}
 
@@ -105,8 +105,8 @@ func TestInterceptCallback_Success(t *testing.T) {
 	// Wait briefly for server to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Simulate callback
-	callbackURL := fmt.Sprintf("http://%s/callback?code=test-auth-code&state=test-state", addr)
+	// Simulate callback on the default Codex redirect path.
+	callbackURL := fmt.Sprintf("http://%s/auth/callback?code=test-auth-code&state=test-state", addr)
 	resp, err := http.Get(callbackURL)
 	if err != nil {
 		t.Fatalf("callback request error = %v", err)
@@ -141,7 +141,7 @@ func TestInterceptCallback_StateMismatch(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	callbackURL := fmt.Sprintf("http://%s/callback?code=test&state=wrong-state", addr)
+	callbackURL := fmt.Sprintf("http://%s/auth/callback?code=test&state=wrong-state", addr)
 	resp, _ := http.Get(callbackURL)
 	if resp != nil {
 		resp.Body.Close()

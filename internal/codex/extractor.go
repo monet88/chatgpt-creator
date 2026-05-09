@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	callbackListenAddr = "127.0.0.1:22122"
-	callbackTimeout    = 30 * time.Second
+	callbackTimeout = 30 * time.Second
 )
 
 // TokenEntry is the panel-compatible JSON record written to the output file.
@@ -62,16 +61,24 @@ func (e *Extractor) Extract(ctx context.Context, emailAddr string) (*TokenResult
 		return nil, fmt.Errorf("codex: state generation failed: %w", err)
 	}
 
-	authorizeURL := BuildAuthorizeURL(e.cfg, pkce, state)
+	// Bind ephemeral port for callback, then override RedirectURI to match.
+	redirectURI, waitFn, listenErr := StartCallbackInterceptor(ctx, state, callbackTimeout)
+	if listenErr != nil {
+		return nil, fmt.Errorf("codex: %w", listenErr)
+	}
 
-	// Start callback server before initiating the authorize redirect.
+	cfg := e.cfg
+	cfg.RedirectURI = redirectURI
+	authorizeURL := BuildAuthorizeURL(cfg, pkce, state)
+
+	// Wait for callback in background.
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
-		code, err := InterceptCallback(ctx, callbackListenAddr, state, callbackTimeout)
-		if err != nil {
-			errCh <- err
+		code, waitErr := waitFn()
+		if waitErr != nil {
+			errCh <- waitErr
 			return
 		}
 		codeCh <- code
@@ -108,7 +115,7 @@ func (e *Extractor) Extract(ctx context.Context, emailAddr string) (*TokenResult
 		return nil, ctx.Err()
 	}
 
-	tokens, err := ExchangeCode(ctx, e.cfg, code, pkce.Verifier)
+	tokens, err := ExchangeCode(ctx, cfg, code, pkce.Verifier)
 	if err != nil {
 		return nil, fmt.Errorf("codex: token exchange failed: %w", err)
 	}
