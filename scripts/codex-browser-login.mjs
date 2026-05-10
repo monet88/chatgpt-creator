@@ -97,6 +97,7 @@ async function api(camo, method, path, body) {
 async function getTabUrl(camo, tabId, userId) {
   const r   = await api(camo, 'GET', `/tabs?userId=${encodeURIComponent(userId)}`);
   const tab = (r.tabs || []).find(t => t.id === tabId || t.tabId === tabId);
+  if (!tab) throw new Error(`tab ${tabId} is missing (browser closed or crashed)`);
   return tab?.url || '';
 }
 
@@ -215,26 +216,53 @@ async function waitForSmsOTP(token, requestId, timeout = 120) {
 
 // ── phone verification flow ───────────────────────────────────────────────────
 
-async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId, maxRetries = 3) {
+async function handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId, maxRetries = 5) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const phone = await rentPhone(viotpToken, viotpServiceId);
     console.log(`[phone] rented number ending ${String(phone.phone_number).slice(-4)} (attempt ${attempt + 1})`);
 
     // Select Vietnam +84
-    await api(camo, 'POST', `/tabs/${tabId}/select`, {
-      userId, selector: 'select[name="countryCode"], select[id*="country"]',
-      value: 'VN',
-    });
+    console.log('[phone] selecting country (Vietnam)...');
+    try {
+      await clickEl(camo, tabId, userId, 'button[aria-label*="country"], button[aria-haspopup="listbox"]');
+      const selResult = await api(camo, 'POST', `/tabs/${tabId}/evaluate`, {
+        userId, expression: `
+          (async function() {
+            for (let i = 0; i < 30; i++) {
+              const opts = Array.from(document.querySelectorAll('[role="option"], li'));
+              const vn = opts.find(o => o.textContent.includes('Vietnam'));
+              if (vn) {
+                vn.click();
+                return "Vietnam selected";
+              }
+              const lb = document.querySelector('[role="listbox"], .listbox');
+              if (lb) lb.scrollTop += 800;
+              await new Promise(r => setTimeout(r, 200));
+            }
+            return "Vietnam not found";
+          })()
+        `
+      });
+      console.log(`[phone] country selection: ${JSON.stringify(selResult)}`);
+    } catch (selErr) {
+      console.log(`[phone] country selection error: ${selErr.message}`);
+    }
 
-    await typeInto(camo, tabId, userId, 'input[type="tel"], input[name="phone"]', phone.phone_number);
-    await clickEl(camo, tabId, userId, 'button[type="submit"]');
+    await new Promise(r => setTimeout(r, 1500));
+    let cleanPhone = String(phone.phone_number);
+    if (cleanPhone.startsWith('0')) cleanPhone = cleanPhone.slice(1);
+    if (cleanPhone.startsWith('84')) cleanPhone = cleanPhone.slice(2);
+    
+    console.log(`[phone] typing clean number: ${cleanPhone}`);
+    await typeInto(camo, tabId, userId, 'input[type="tel"]:not([type="hidden"]), input[name*="phone"]:not([type="hidden"])', cleanPhone);
+    await clickEl(camo, tabId, userId, 'button[type="submit"], button:has-text("Continue")');
     await new Promise(r => setTimeout(r, 3000));
 
     // Check if rejected (snapshot contains rejection keywords)
     const s = await snap(camo, tabId, userId);
     const snapText = JSON.stringify(s).toLowerCase();
-    if (snapText.includes('not valid') || snapText.includes('invalid') || snapText.includes('not supported')) {
-      console.log('[phone] number rejected, retrying...');
+    if (snapText.includes('not valid') || snapText.includes('invalid') || snapText.includes('not supported') || snapText.includes('something went wrong')) {
+      console.log(`[phone] number rejected (${phone.phone_number}), retrying...`);
       continue;
     }
 
@@ -274,7 +302,7 @@ async function doBrowserLogin(opts) {
   console.log('[browser] navigating to authorize URL...');
   const opened = await api(camo, 'POST', '/tabs', {
     userId,
-    sessionKey: 'default',
+    sessionKey: userId,
     url: authorizeUrl,
     ...(proxy ? { proxy: parseProxy(proxy), geoMode: 'proxy-locked' } : {}),
   });
@@ -283,102 +311,109 @@ async function doBrowserLogin(opts) {
   console.log(`[browser] tabId=${tabId}`);
 
   try {
-    await waitNet(camo, tabId, userId, 8000);
-
-    // Fill email and record freshSince (60s before submit to absorb clock skew)
-    await typeInto(camo, tabId, userId, 'input[name="email"]', email);
+    const deadline = Date.now() + 420_000;
     const freshSince = new Date(Date.now() - 60_000);
-    await clickEl(camo, tabId, userId, 'button[type="submit"]');
-    await new Promise(r => setTimeout(r, 3000));
-    await waitNet(camo, tabId, userId, 6000);
+    console.log('[browser] starting interactive flow loop...');
 
-    let url = await getTabUrl(camo, tabId, userId);
-    console.log(`[browser] landed on: ${url}`);
-
-    // Password step
-    if (url.includes('/password') && password) {
-      console.log('[browser] password step');
-      await typeInto(camo, tabId, userId, 'input[type="password"]', password);
-      await clickEl(camo, tabId, userId, 'button[type="submit"]');
-      await new Promise(r => setTimeout(r, 3000));
-      await waitNet(camo, tabId, userId, 8000);
-      url = await getTabUrl(camo, tabId, userId);
-      console.log(`[browser] post-password url: ${url}`);
-    }
-
-    // Email OTP step
-    // NOT button[type="submit"] — 2 matches on email-verification page (Continue + Resend email)
-    if (url.includes('email-verification') || url.includes('/otp')) {
-      console.log('[browser] email OTP step');
-      const otp = await waitForOTP(mailUrl, email, mailToken, 300, freshSince);
-      if (!otp) throw new Error('OTP not received within 300s');
-      console.log(`[browser] OTP received, submitting...`);
-      await typeInto(camo, tabId, userId, 'input[name="code"], input[autocomplete="one-time-code"]', otp);
-      await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"]');
-      await new Promise(r => setTimeout(r, 3000));
-      await waitNet(camo, tabId, userId, 8000);
-      url = await getTabUrl(camo, tabId, userId);
-      console.log(`[browser] post-OTP url: ${url}`);
-    }
-
-    // TOTP step — retry with next 30s window on clock skew (max 2 retries)
-    url = await getTabUrl(camo, tabId, userId);
-    if (isTotpChallengeUrl(url) && totpSecret) {
-      console.log('[browser] TOTP step');
-      for (let attempt = 0; attempt <= 2; attempt++) {
-        const totp = generateTOTP(totpSecret);
-        console.log(`[browser] TOTP attempt ${attempt + 1}`);
-        await typeInto(camo, tabId, userId, 'input[autocomplete="one-time-code"], input[name="code"]', totp);
-        await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"]');
-        await new Promise(r => setTimeout(r, 3000));
-        url = await getTabUrl(camo, tabId, userId);
-        if (!isTotpChallengeUrl(url)) break;
-        // Wait for next 30s TOTP window before retry
-        const msToNext = 30_000 - (Date.now() % 30_000);
-        console.log(`[browser] TOTP failed, waiting ${Math.ceil(msToNext / 1000)}s for next window...`);
-        await new Promise(r => setTimeout(r, msToNext + 500));
+    while (Date.now() < deadline) {
+      let url = await getTabUrl(camo, tabId, userId);
+      console.log(`[browser] loop: url=${url}`);
+      if (url.includes('localhost:1455') && (url.includes('code=') || url.includes('error='))) {
+        console.log(`[browser] callback reached: ${url}`);
+        const code = new URL(url).searchParams.get('code');
+        if (!code) throw new Error(`OAuth error in callback: ${url}`);
+        return code;
       }
-    }
 
-    // Phone verification step
-    url = await getTabUrl(camo, tabId, userId);
-    if ((url.includes('add-phone') || url.includes('phone-verification')) && viotpToken) {
-      console.log('[browser] phone verification step');
-      await handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId);
-      await waitUrl(camo, tabId, userId, u => !u.includes('phone'), 30_000);
-      url = await getTabUrl(camo, tabId, userId);
-      console.log(`[browser] post-phone url: ${url}`);
-    }
-
-    // Consent step
-    url = await getTabUrl(camo, tabId, userId);
-    if (url.includes('consent')) {
-      console.log(`[browser] consent page`);
-      await clickEl(camo, tabId, userId,
-        'button[type="submit"], button:has-text("Allow"), button:has-text("Authorize"), button:has-text("Continue")'
-      );
-      await waitUrl(camo, tabId, userId, u => !u.includes('consent'), 30_000);
-    }
-
-    // Capture OAuth code via URL polling (primary) or snapshot fallback
-    console.log('[browser] polling for OAuth callback URL...');
-    let code;
-    try {
-      const callbackUrl = await waitUrl(
-        camo, tabId, userId,
-        u => u.includes('localhost:1455') && u.includes('code='),
-        90_000,
-      );
-      console.log('[browser] callback URL captured');
-      code = new URL(callbackUrl).searchParams.get('code');
-    } catch {
       const s = await snap(camo, tabId, userId);
-      const m = JSON.stringify(s).match(/code=([A-Za-z0-9_\-]+)/);
-      if (m) { code = m[1]; console.log('[browser] code extracted from snapshot'); }
-    }
+      const t = JSON.stringify(s).toLowerCase();
 
-    if (!code) throw new Error('OAuth code not captured');
-    return code;
+      // 1. Email input
+      if ((t.includes('email address') || t.includes('name="email"')) && !t.includes('password')) {
+        console.log('[browser] typing email...');
+        await typeInto(camo, tabId, userId, 'input[name="email"], input[type="email"], input[type="text"]', email);
+        await clickEl(camo, tabId, userId, 'button[type="submit"] >> nth=0');
+        await new Promise(r => setTimeout(r, 4000));
+        continue;
+      }
+
+      // 2. Signup redirection
+      if ((url.includes('/log-in') || url.includes('/login')) && (t.includes('incorrect email address') || t.includes('don\'t have an account') || t.includes('sign up'))) {
+        console.log('[browser] account not found or login rejected, attempting signup redirection...');
+        await clickEl(camo, tabId, userId, 'a[href*="signup"], a[href*="create-account"], button:has-text("Sign up") >> nth=0');
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+
+      // 3. Password input (Login or Signup)
+      if (t.includes('password')) {
+        console.log('[browser] typing password...');
+        await typeInto(camo, tabId, userId, 'input[name="password"], input[type="password"]', password);
+        await clickEl(camo, tabId, userId, 'button[type="submit"] >> nth=0');
+        await new Promise(r => setTimeout(r, 6000));
+        continue;
+      }
+
+      // 4. Email OTP / Verification
+      if (t.includes('verify your email') || t.includes('check your inbox') || url.includes('email-verification')) {
+        console.log('[browser] email verification detected');
+        const otpBox = 'input[name="code"], input[autocomplete="one-time-code"], input[type="text"]';
+        // check if box exists in snap
+        if (t.includes('autocomplete="one-time-code"') || t.includes('name="code"')) {
+           const otp = await waitForOTP(mailUrl, email, mailToken, 300, freshSince);
+           await typeInto(camo, tabId, userId, otpBox, otp);
+           await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"] >> nth=0');
+           await new Promise(r => setTimeout(r, 6000));
+           continue;
+        } else {
+           console.log('[browser] verification link? waiting for background activation...');
+           await new Promise(r => setTimeout(r, 8000));
+           continue;
+        }
+      }
+
+      // 5. Onboarding (Name/Birthday)
+      if (url.includes('onboarding') || t.includes('name="firstName"') || t.includes('birthday')) {
+        console.log('[browser] onboarding step');
+        await typeInto(camo, tabId, userId, 'input[name="firstName"]', 'Ethan');
+        await typeInto(camo, tabId, userId, 'input[name="lastName"]', 'Martinez');
+        await typeInto(camo, tabId, userId, 'input[name="birthday"]', '12/12/1995');
+        await clickEl(camo, tabId, userId, 'button[type="submit"] >> nth=0');
+        await new Promise(r => setTimeout(r, 6000));
+        continue;
+      }
+
+      // 6. Phone verification
+      if (url.includes('phone') || t.includes('verify your phone') || t.includes('phone-number')) {
+        console.log('[browser] phone verification step');
+        await handlePhoneVerification(camo, tabId, userId, viotpToken, viotpServiceId);
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+
+      // 7. TOTP
+      if (isTotpChallengeUrl(url) && totpSecret) {
+        console.log('[browser] TOTP step');
+        const totp = generateTOTP(totpSecret);
+        await typeInto(camo, tabId, userId, 'input[autocomplete="one-time-code"], input[name="code"]', totp);
+        await clickEl(camo, tabId, userId, 'button[name="intent"][value="validate"], button[type="submit"]');
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+
+      // 8. General Continue/Authorize
+      if (t.includes('button:has-text("continue")') || t.includes('button:has-text("agree")') || url.includes('consent')) {
+        console.log('[browser] clicking continue/authorize...');
+        await clickEl(camo, tabId, userId, 'button:has-text("Agree"), button:has-text("Authorize"), button:has-text("Continue"), button[type="submit"] >> nth=0');
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+
+      // If no match, wait
+      process.stdout.write('.');
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    throw new Error('Timeout waiting for OAuth callback');
 
   } finally {
     await api(camo, 'DELETE', `/tabs/${tabId}`, { userId }).catch(() => {});

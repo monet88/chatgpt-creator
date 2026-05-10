@@ -1,5 +1,9 @@
 {
   "devDependencies": {
     "wrangler": "^4.90.0"
+  },
+  "dependencies": {
+    "cloakbrowser": "^0.3.27",
+    "playwright-core": "^1.59.1"
   }
 }
