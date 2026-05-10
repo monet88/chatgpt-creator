@@ -2,6 +2,7 @@ package register
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ func TestWriteCodexArtifacts_WritesPanelWhenTokenOutputEmpty(t *testing.T) {
 		printMu:        &printMu,
 		fileMu:         &fileMu,
 		panelOutputDir: outputDir,
+		totpSecret:     "BASE32SECRET",
 	}
 
 	err := client.writeCodexArtifacts(context.Background(), "alice@example.com", &codex.TokenResult{
@@ -49,5 +51,12 @@ func TestWriteCodexArtifacts_WritesPanelWhenTokenOutputEmpty(t *testing.T) {
 	}
 	if len(matches) != 1 {
 		t.Fatalf("panel files = %d, want 1", len(matches))
+	}
+	content, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(content), `"totp_secret": "BASE32SECRET"`) {
+		t.Fatalf("panel file missing totp secret: %s", string(content))
 	}
 }

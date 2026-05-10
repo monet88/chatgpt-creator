@@ -14,6 +14,7 @@ import (
 
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/monet88/chatgpt-creator/internal/codex"
+	"github.com/monet88/chatgpt-creator/internal/mfa"
 	"github.com/monet88/chatgpt-creator/internal/sentinel"
 	"github.com/monet88/chatgpt-creator/internal/util"
 )
@@ -152,17 +153,11 @@ func (c *Client) register(email, password string) (int, map[string]interface{}, 
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
-	sentinelToken, err := sentinel.BuildSentinelToken(c.session, c.deviceID, "create_account", c.ua, c.secChUA, c.impersonate)
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to get sentinel auth: %v", err)
-	}
-
 	req, _ := http.NewRequest("POST", regURL, bytes.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", authURL+"/create-account/password")
 	req.Header.Set("Origin", authURL)
-	req.Header.Set("openai-sentinel-token", sentinelToken)
 
 	applyTraceHeaders(req)
 
@@ -244,7 +239,8 @@ func (c *Client) createAccount(name, birthdate string) (int, map[string]interfac
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
-	sentinelCreateAccount, err := sentinel.BuildSentinelToken(c.session, c.deviceID, "create_account", c.ua, c.secChUA, c.impersonate)
+	sentinelCreateAccount, err := sentinel.BuildSentinelToken(c.session, c.deviceID, "create_account", c.ua, c.secChUA, c.impersonate,
+		sentinel.Opts{CamofoxURL: c.camofoxURL, Proxy: c.proxy})
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to get sentinel auth: %v", err)
 	}
@@ -302,13 +298,31 @@ func (c *Client) RunRegister(emailAddr, password, name, birthdate string) error 
 // RunRegisterWithContext executes the full registration flow and, if codex extraction
 // is enabled, extracts OAuth tokens for Codex after a successful registration.
 func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
+	c.totpSecret = ""
+
 	err := c.runFlow(ctx, emailAddr, password, name, birthdate)
-	if err == nil && c.codexEnabled {
+	if err != nil {
+		return err
+	}
+	if c.mfaEnabled {
+		mfaUserID := strings.NewReplacer("@", "-", ".", "-").Replace(emailAddr)
+		result, setupErr := mfa.SetupTOTP(ctx, emailAddr, c.otpProvider, mfaUserID, mfa.SetupOpts{
+			CamofoxBaseURL: c.camofoxURL,
+			Password:       password,
+			Proxy:          c.proxy,
+		})
+		if setupErr != nil {
+			c.print("MFA setup failed (non-fatal): " + setupErr.Error())
+		} else if result != nil {
+			c.totpSecret = result.Secret
+		}
+	}
+	if c.codexEnabled {
 		if codexErr := c.extractCodexTokens(ctx, emailAddr); codexErr != nil {
 			c.print("Codex extraction failed: " + codexErr.Error())
 		}
 	}
-	return err
+	return nil
 }
 
 func applyTraceHeaders(req *http.Request) {
@@ -392,9 +406,8 @@ func (c *Client) runFlow(ctx context.Context, emailAddr, password, name, birthda
 		}
 		needOTP = true
 	} else if strings.Contains(finalPath, "email-verification") || strings.Contains(finalPath, "email-otp") {
-		// OpenAI auto-sends an OTP when redirecting to email-verification; calling sendOTP
-		// again resets session state and causes invalid_state on validation.
-		c.print("Jump to OTP verification stage (auto-OTP sent by OpenAI)")
+		// OTP already dispatched by OpenAI — skip register and sendOTP.
+		c.print("Jump to OTP verification stage")
 		needOTP = true
 	} else if strings.Contains(finalPath, "about-you") {
 		c.print("Jump to fill information stage")
@@ -422,21 +435,7 @@ func (c *Client) runFlow(ctx context.Context, emailAddr, password, name, birthda
 		c.print("Account registration completed")
 		return nil
 	} else {
-		c.print(fmt.Sprintf("Unknown jump: %s", finalURL))
-		status, data, runErr := c.register(emailAddr, password)
-		if runErr != nil {
-			return WrapFailure("register", status, runErr)
-		}
-		if !isSuccessStatus(status) {
-			return NewFailure(classifyStatusFailure(status, data), "register", status, fmt.Errorf("register failed: %v", data))
-		}
-		status, data, sendErr := c.sendOTP()
-		if sendErr != nil {
-			return WrapFailure("send_otp", status, sendErr)
-		}
-		if !isSuccessStatus(status) {
-			return NewFailure(classifyStatusFailure(status, data), "send_otp", status, fmt.Errorf("send otp failed: %v", data))
-		}
+		c.print(fmt.Sprintf("Unknown authorize redirect: %s — attempting OTP path", finalURL))
 		needOTP = true
 	}
 
@@ -722,6 +721,7 @@ func (c *Client) writeCodexArtifacts(ctx context.Context, emailAddr string, toke
 	if c.panelOutputDir != "" {
 		fetchModels := tokens.IDToken != ""
 		entry := buildPanelEntry(ctx, emailAddr, tokens, fetchModels)
+		entry.TOTPSecret = c.totpSecret
 		c.fileMu.Lock()
 		panelErr := writePanelFile(c.panelOutputDir, entry)
 		c.fileMu.Unlock()

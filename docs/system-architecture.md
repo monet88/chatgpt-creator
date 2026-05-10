@@ -36,6 +36,48 @@ CLI (cmd/register)
 6. On success write `email|password|mailboxURL` to output file.
 7. Return `BatchResult` with `stop_reason` and `failure_summary`.
 
+## Registration State Machine (`internal/register/flow.go`)
+
+`runFlow` branches on the path that `authorize` redirects to:
+
+```
+visitHomepage → getCSRF → signin → authorize
+                                       │
+         ┌─────────────────────────────┼──────────────────┬────────────────────┐
+         ▼                             ▼                  ▼                    ▼
+create-account/           email-verification /       about-you           callback /
+   password                   email-otp                                 chatgpt.com
+         │                             │                  │
+         ▼                             ▼                  ▼
+    register()                  (skip register)    createAccount()    ← done
+    sendOTP()                   OTP already sent         │
+         │                             │                  ▼
+         └──────────────────► validateOTP()           callback()
+                                       │
+                                       ▼
+                               createAccount()   ← openai-sentinel-token REQUIRED
+                                       │
+                                       ▼
+                                   callback()
+```
+
+### Sentinel token contracts (fixed — do not change)
+
+| API endpoint | `openai-sentinel-token` header |
+|---|---|
+| `POST /api/accounts/user/register` | **NOT sent** — sending it with invalid `t` field causes 400 |
+| `POST /api/accounts/create_account` | **REQUIRED** via `BuildSentinelToken` |
+| `POST /api/accounts/email-otp/validate` | Not sent |
+
+### Flow guard rule
+
+When `authorize` returns `email-verification` or `email-otp`, OpenAI has already
+dispatched the OTP (OTP-first flow). **Do not** call `register()` on this path.
+Do not add navigation to `create-account/password` before `register()` on this path.
+
+When debugging a flow regression, compare against `verssache/chatgpt-creator`
+(upstream reference) before adding new steps.
+
 ## Concurrency Model
 
 - Worker pool (`maxWorkers` goroutines)

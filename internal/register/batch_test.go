@@ -34,5 +34,7 @@ func TestProviderOptions_ExposesPhoneAndCodexFields(t *testing.T) {
 		ViOTPServiceID: 0,
 		CodexEnabled:   false,
 		CodexOutput:    "",
+		MFAEnabled:     false,
+		CamofoxURL:     "",
 	}
 }

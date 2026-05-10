@@ -1,6 +1,6 @@
 # Codebase Summary
 
-_Last updated: 2026-05-08 (web UI + panel writer)_
+_Last updated: 2026-05-10 (flow fix: OTP-first path, sentinel token contracts)_
 
 ## Repository Snapshot
 
@@ -44,10 +44,25 @@ _Last updated: 2026-05-08 (web UI + panel writer)_
 2. Config loads from JSON with defaults and `PROXY` env override.
 3. Runtime options are validated.
 4. Batch runner executes worker loop with runtime controls.
-5. Worker runs registration flow + OTP polling and writes credential on success.
+5. Worker runs registration flow state machine (see below) + OTP polling and writes credential on success.
 6. Optional: post-registration Codex PKCE OAuth flow extracts `access_token`/`refresh_token`.
 7. Optional `--panel-output`: writes per-account `codex-{email}-{plan}.json` (panel-compatible format).
 8. Batch returns structured summary (`BatchResult`).
+
+#### Registration flow state machine (`internal/register/flow.go`)
+
+`authorize` redirect path determines the branch — **do not add cross-branch steps**:
+
+| Path | Steps | Sentinel token |
+|------|-------|----------------|
+| `create-account/password` | `register()` → `sendOTP()` → `validateOTP()` → `createAccount()` | Only on `createAccount()` |
+| `email-verification` / `email-otp` | `validateOTP()` → `createAccount()` — OTP already sent, **skip `register()`** | Only on `createAccount()` |
+| `about-you` | `createAccount()` only | Only on `createAccount()` |
+
+`register()` must **not** carry an `openai-sentinel-token` header — the sentinel
+challenge now requires a solved Turnstile token in the `t` field; sending an
+empty/invalid token causes 400. `register()` in the upstream reference implementation
+has never included this header. See `docs/decisions/0005-registration-flow-otp-first-path.md`.
 
 ### Web UI path (`register serve`)
 

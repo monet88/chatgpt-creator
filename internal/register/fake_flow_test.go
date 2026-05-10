@@ -14,18 +14,23 @@ import (
 )
 
 type fakeFlowRunner struct {
-	runErr error
+	runErr     error
+	totpSecret string
 }
 
 func (f fakeFlowRunner) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
 	return f.runErr
 }
 
-func baseDeps(t *testing.T, runnerErr error, writeFn func(outputFile, emailAddr, password, mailboxURL string) error) batchDependencies {
+func (f fakeFlowRunner) TOTPSecret() string {
+	return f.totpSecret
+}
+
+func baseDeps(t *testing.T, runnerErr error, totpSecret string, writeFn func(outputFile, emailAddr, password, mailboxURL string, totpSecret ...string) error) batchDependencies {
 	t.Helper()
 	return batchDependencies{
 		newClient: func(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (flowRunner, error) {
-			return fakeFlowRunner{runErr: runnerErr}, nil
+			return fakeFlowRunner{runErr: runnerErr, totpSecret: totpSecret}, nil
 		},
 		createTempEmail: func(defaultDomain string) (emailAddr, mailboxURL string, err error) {
 			return "alice@example.com", "https://generator.email/example.com/alice", nil
@@ -49,7 +54,7 @@ func baseDeps(t *testing.T, runnerErr error, writeFn func(outputFile, emailAddr,
 
 func TestRegisterOne_SuccessWritesCredential(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "results.txt")
-	deps := baseDeps(t, nil, appendCredential)
+	deps := baseDeps(t, nil, "", appendCredential)
 
 	var printMu sync.Mutex
 	var fileMu sync.Mutex
@@ -88,7 +93,7 @@ func TestRegisterOne_FailuresDoNotWriteCredential(t *testing.T) {
 	for _, tc := range failureCases {
 		t.Run(tc.name, func(t *testing.T) {
 			writeCalled := false
-			deps := baseDeps(t, tc.runErr, func(outputFile, emailAddr, password, mailboxURL string) error {
+			deps := baseDeps(t, tc.runErr, "", func(outputFile, emailAddr, password, mailboxURL string, totpSecret ...string) error {
 				writeCalled = true
 				return nil
 			})
@@ -111,7 +116,7 @@ func TestRegisterOne_FailuresDoNotWriteCredential(t *testing.T) {
 }
 
 func TestRegisterOne_WriteFailureReturnsError(t *testing.T) {
-	deps := baseDeps(t, nil, func(outputFile, emailAddr, password, mailboxURL string) error {
+	deps := baseDeps(t, nil, "", func(outputFile, emailAddr, password, mailboxURL string, totpSecret ...string) error {
 		return errors.New("failed to write to output file")
 	})
 
@@ -135,7 +140,7 @@ func TestRunBatchWithOptions_ProxyStatsSnapshot(t *testing.T) {
 			Failures: 0,
 		},
 	}
-	deps := baseDeps(t, nil, appendCredential)
+	deps := baseDeps(t, nil, "", appendCredential)
 	deps.resolveProxy = func(ctx context.Context, fallback string) (string, error) {
 		return "http://proxy-1:8080", nil
 	}
@@ -168,5 +173,49 @@ func TestRunBatchWithOptions_ProxyStatsSnapshot(t *testing.T) {
 	}
 	if entry.Success < 2 {
 		t.Fatalf("success count = %d, want >= 2", entry.Success)
+	}
+}
+
+func TestRegisterOne_AppendsTOTPSecretWhenProvided(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "results.txt")
+	deps := baseDeps(t, nil, "BASE32SECRET", appendCredential)
+	deps.mfaEnabled = true
+
+	var printMu sync.Mutex
+	var fileMu sync.Mutex
+
+	success, _, runErr := registerOne(context.Background(), 1, "1/1", "", outputPath, "", "example.com", &printMu, &fileMu, deps)
+	if !success || runErr != nil {
+		t.Fatalf("success=%v err=%v", success, runErr)
+	}
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if got := string(content); got != "alice@example.com|generated-password|https://generator.email/example.com/alice|BASE32SECRET\n" {
+		t.Fatalf("output content = %q", got)
+	}
+}
+
+func TestRegisterOne_PreservesMFAColumnWhenSecretMissing(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "results.txt")
+	deps := baseDeps(t, nil, "", appendCredential)
+	deps.mfaEnabled = true
+
+	var printMu sync.Mutex
+	var fileMu sync.Mutex
+
+	success, _, runErr := registerOne(context.Background(), 1, "1/1", "", outputPath, "", "example.com", &printMu, &fileMu, deps)
+	if !success || runErr != nil {
+		t.Fatalf("success=%v err=%v", success, runErr)
+	}
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if got := string(content); got != "alice@example.com|generated-password|https://generator.email/example.com/alice|\n" {
+		t.Fatalf("output content = %q", got)
 	}
 }

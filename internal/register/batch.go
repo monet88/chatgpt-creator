@@ -78,8 +78,17 @@ func registerOne(ctx context.Context, workerID int, tag string, proxy, outputFil
 
 	deps.reportProxy(resolvedProxy, true)
 
+	var totpSecret string
+	if provider, ok := client.(totpSecretProvider); ok {
+		totpSecret = provider.TOTPSecret()
+	}
+
 	fileMu.Lock()
-	err = deps.writeCredential(outputFile, emailAddr, password, mailboxURL)
+	if deps.mfaEnabled {
+		err = deps.writeCredential(outputFile, emailAddr, password, mailboxURL, totpSecret)
+	} else {
+		err = deps.writeCredential(outputFile, emailAddr, password, mailboxURL)
+	}
 	fileMu.Unlock()
 	if err != nil {
 		return false, emailAddr, NewFailure(FailureOutputWrite, "write_credential", 0, err)
@@ -125,6 +134,10 @@ type ProviderOptions struct {
 	// PanelOutputDir is the directory where per-account panel JSON files are written.
 	// Files are named codex-{email}-{plan}.json. No-op when empty.
 	PanelOutputDir string
+	// MFAEnabled enables post-registration TOTP enrollment.
+	MFAEnabled bool
+	// CamofoxURL is the REST API base URL used for browser-driven MFA enrollment.
+	CamofoxURL string
 	// CreateTempEmail overrides the default temp email creation function.
 	// When set, it replaces the generator.email-based mailbox creation.
 	CreateTempEmail func(domain string) (emailAddr, mailboxURL string, err error)
@@ -148,6 +161,10 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.codexEnabled = true
 		deps.codexOutput = providers.CodexOutput
 		deps.panelOutputDir = providers.PanelOutputDir
+	}
+	if providers.MFAEnabled {
+		deps.mfaEnabled = true
+		deps.camofoxURL = providers.CamofoxURL
 	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool

@@ -44,7 +44,7 @@ User-Agent: Mozilla/5.0 ...   ← required, Cloudflare blocks without it
 → { "success": true, "data": { "otp": "123456", "receivedAt": "2026-05-09T07:45:23.621Z" } }
 ```
 
-Poll until `status == "received"`. Timeout: 300s.
+Poll until `data.otp` is present; use `receivedAt` to reject stale codes if needed. Timeout: 300s.
 
 ### 1e. Submit OTP in browser form
 

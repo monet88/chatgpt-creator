@@ -1,5 +1,34 @@
 # Project Changelog
 
+## 2026-05-10 — Registration Flow Fix: OTP-First Path + Sentinel Contract Correction
+
+### Fixed
+- `internal/register/flow.go` (`runFlow`): when `authorize` redirects to
+  `email-verification` or `email-otp`, `register()` is now **skipped entirely**.
+  OpenAI dispatches OTP before password collection on this path. Calling `register()`
+  caused 400 `upstream_changed` because the sentinel challenge now requires a solved
+  Turnstile token (`t` field); sending an empty token is rejected.
+- `internal/register/flow.go` (`register()`): removed `openai-sentinel-token` header.
+  This header was added in a previous session based on a false assumption. The upstream
+  reference (`verssache/chatgpt-creator`) has never sent this header on `register()`.
+  Only `createAccount()` requires the sentinel token.
+- Removed `visitPasswordPage()`, `needsPasswordRegistration()`, `isAutoOTPRedirect()`
+  helpers that were introduced to support the (incorrect) navigate-then-register approach.
+
+### Added
+- `internal/sentinel/turnstile.go`: `SolveTurnstile` function using camofox browser
+  automation (kept for future use if `register()` ever requires Turnstile on the
+  password-first path). Currently not called.
+- `internal/camofox/client.go`: `Navigate()` and `Evaluate()` methods added to camofox
+  client for browser JS evaluation and tab navigation.
+- `docs/decisions/0005-registration-flow-otp-first-path.md`: decision record for the
+  OTP-first flow invariant and sentinel contract rules.
+
+### Validation
+- `go test ./...` (47 passed in register + sentinel packages)
+- `go build ./...`
+- Manual run: 1/1 account created successfully in ~21s
+
 ## 2026-05-08 — Credential Output Structure Refactor
 
 ### Changed
@@ -25,7 +54,7 @@
 ### Fixed
 - `cloudflare-temp-mail/src/services/otp-extractor.ts`: regex `(?<![#\d])(\d{4,8})` — added `#` to lookbehind to prevent matching CSS hex colors (e.g., `#202123`) in OpenAI email templates as OTP.
 - `internal/register/flow.go` (`email-verification` branch): removed explicit `sendOTP()` call; OpenAI auto-sends OTP on redirect, calling again invalidated session state and caused `invalid_state 409`.
-- `internal/register/flow.go` (`register()`): added `openai-sentinel-token` header (required by `/api/accounts/user/register`).
+- `internal/register/flow.go` (`register()`): added `openai-sentinel-token` header — **later found incorrect and reverted in 2026-05-10 fix**. The register endpoint does not accept this header.
 - `internal/email/cloudflare_tempmailprovider.go` (`GetOTP`): added 60-second freshness filter rejecting stale mailbox entries from prior registration attempts.
 - `internal/email/cloudflare_tempmailprovider.go` (`CreateEmail`): `json:",omitempty"` on domain field — empty domain serialized as `{}` instead of `{"domain":""}` which failed Worker's `??` operator check.
 

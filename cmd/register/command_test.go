@@ -332,6 +332,48 @@ func TestCommand_CodexOutputFlag_WiredToProviders(t *testing.T) {
 	}
 }
 
+func TestCommand_MFAFlags_WiredToProviders(t *testing.T) {
+	var capturedProviders register.ProviderOptions
+	prev := runBatchWithProviders
+	runBatchWithProviders = func(_ context.Context, _ int, _ string, _ int, _, _, _ string, _ register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
+		capturedProviders = providers
+		return register.BatchResult{Target: 1, Success: 1}
+	}
+	defer func() { runBatchWithProviders = prev }()
+
+	exitCode, _, _ := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--mfa", "--camofox-url", "http://localhost:9999"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if !capturedProviders.MFAEnabled {
+		t.Fatal("expected MFAEnabled=true in ProviderOptions")
+	}
+	if capturedProviders.CamofoxURL != "http://localhost:9999" {
+		t.Fatalf("CamofoxURL = %q", capturedProviders.CamofoxURL)
+	}
+}
+
+func TestCommand_MFAFlag_UsesDefaultCamofoxURL(t *testing.T) {
+	var capturedProviders register.ProviderOptions
+	prev := runBatchWithProviders
+	runBatchWithProviders = func(_ context.Context, _ int, _ string, _ int, _, _, _ string, _ register.BatchOptions, providers register.ProviderOptions) register.BatchResult {
+		capturedProviders = providers
+		return register.BatchResult{Target: 1, Success: 1}
+	}
+	defer func() { runBatchWithProviders = prev }()
+
+	exitCode, _, _ := executeCommandForTest(t, []string{"--total", "1", "--workers", "1", "--mfa"}, "")
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if !capturedProviders.MFAEnabled {
+		t.Fatal("expected MFAEnabled=true in ProviderOptions")
+	}
+	if capturedProviders.CamofoxURL != "http://localhost:9377" {
+		t.Fatalf("CamofoxURL = %q, want default", capturedProviders.CamofoxURL)
+	}
+}
+
 // TestCommand_ViOTPFlagIsActionable verifies --viotp-token is treated as an actionable flag
 // (skips interactive prompt and proceeds to non-interactive validation).
 // Without --total, the command hits --total validation before reaching ViOTP checks.
@@ -369,6 +411,7 @@ func TestCommand_ActionableFlagsSkipInteractiveFallback(t *testing.T) {
 		{name: "imap port", args: []string{"--imap-port", "993"}},
 		{name: "imap user", args: []string{"--imap-user", "user@example.com"}},
 		{name: "panel output", args: []string{"--panel-output", "tokens"}},
+		{name: "mfa", args: []string{"--mfa"}},
 	}
 
 	for _, tc := range testCases {

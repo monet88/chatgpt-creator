@@ -33,7 +33,7 @@ func newCountedDeps(calls *int64, runErr error) batchDependencies {
 		generatePassword: func() string { return "generated-password" },
 		randomName:       func() (string, string) { return "Alice", "Doe" },
 		randomBirthdate:  func() string { return "1990-01-01" },
-		writeCredential:  func(outputFile, emailAddr, password, mailboxURL string) error { return nil },
+		writeCredential:  func(outputFile, emailAddr, password, mailboxURL string, totpSecret ...string) error { return nil },
 		resolveProxy: func(ctx context.Context, fallback string) (string, error) {
 			return fallback, nil
 		},

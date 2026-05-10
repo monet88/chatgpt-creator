@@ -40,9 +40,12 @@ type Client struct {
 	otpProvider    email.OTPProvider
 	phoneProvider  phone.PhoneProvider
 	viOTPServiceID int
-	codexEnabled    bool
-	codexOutput     string
-	panelOutputDir  string
+	codexEnabled   bool
+	codexOutput    string
+	panelOutputDir string
+	mfaEnabled     bool
+	camofoxURL     string
+	totpSecret     string
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {
@@ -186,4 +189,8 @@ func randomAcceptLanguage() string {
 
 func randomAcceptEncoding() string {
 	return acceptEncodingOptions[rand.Intn(len(acceptEncodingOptions))]
+}
+
+func (c *Client) TOTPSecret() string {
+	return c.totpSecret
 }

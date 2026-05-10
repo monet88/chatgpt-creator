@@ -91,6 +91,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 		codexEnabled   bool
 		codexOutput    string
 		panelOutputDir string
+		mfaEnabled     bool
+		camofoxURL     string
 		// Cloudflare temp-mail flags
 		cloudflareMailURL   string
 		cloudflareMailToken string
@@ -156,6 +158,7 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				cmd.Flags().Changed("codex") ||
 				cmd.Flags().Changed("codex-output") ||
 				cmd.Flags().Changed("panel-output") ||
+				cmd.Flags().Changed("mfa") ||
 				cmd.Flags().Changed("cloudflare-mail-url") ||
 				cmd.Flags().Changed("cloudflare-mail-token")
 			if interactive || !hasActionableFlags {
@@ -329,12 +332,19 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				providers.CodexOutput = codexPath
 				providers.PanelOutputDir = panelOutputDir
 			}
+			if mfaEnabled {
+				providers.MFAEnabled = true
+				providers.CamofoxURL = camofoxURL
+			}
 
 			if jsonMode {
 				var result register.BatchResult
 				withDiagnosticWriter(errOut, func() {
 					opts := register.DefaultBatchOptionsForCLI(total)
 					opts.PacingProfile = pacingProfile
+					if providers.MFAEnabled && opts.PerAccountTimeout < 8*time.Minute {
+						opts.PerAccountTimeout = 8 * time.Minute
+					}
 					result = runBatchWithProviders(cmd.Context(), total, outputPath, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 				})
 				if err := json.NewEncoder(out).Encode(result); err != nil {
@@ -348,6 +358,9 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 
 			opts := register.DefaultBatchOptionsForCLI(total)
 			opts.PacingProfile = pacingProfile
+			if providers.MFAEnabled && opts.PerAccountTimeout < 8*time.Minute {
+				opts.PerAccountTimeout = 8 * time.Minute
+			}
 			result := runBatchWithProviders(cmd.Context(), total, outputPath, workers, effectiveProxy, effectivePassword, effectiveDomain, opts, providers)
 			if result.Success < int64(result.Target) {
 				return &exitError{code: exitCodeRuntime, err: fmt.Errorf("runtime error: target not reached (%d/%d), stop_reason=%s", result.Success, result.Target, result.StopReason)}
@@ -385,6 +398,8 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 	cmd.Flags().BoolVar(&codexEnabled, "codex", false, "Enable post-registration Codex token extraction")
 	cmd.Flags().StringVar(&codexOutput, "codex-output", "", "Codex token array JSON path (opt-in); e.g. accounts/tokens/tokens.json")
 	cmd.Flags().StringVar(&panelOutputDir, "panel-output", "", "Per-account panel JSON dir; default accounts/tokens/ when --codex enabled")
+	cmd.Flags().BoolVar(&mfaEnabled, "mfa", false, "Enroll TOTP 2FA after registration")
+	cmd.Flags().StringVar(&camofoxURL, "camofox-url", "http://localhost:9377", "Camofox REST API base URL")
 	// Cloudflare temp-mail flags
 	cmd.Flags().StringVar(&cloudflareMailURL, "cloudflare-mail-url", "", "Base URL of Cloudflare temp-mail Worker (e.g. https://mail.monet.uno)")
 	cmd.Flags().StringVar(&cloudflareMailToken, "cloudflare-mail-token", "", "Bearer token for Cloudflare temp-mail API")

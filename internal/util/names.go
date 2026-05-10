@@ -36,10 +36,10 @@ func ParseNameFromEmail(emailAddr string) (firstName, lastName string, ok bool) 
 	return capitalize(m[1]), capitalize(m[2]), true
 }
 
-// RandomBirthdate returns a random birthdate string in YYYY-MM-DD format from 1985-2002.
+// RandomBirthdate returns a random birthdate string in YYYY-MM-DD format for ages 30+.
 func RandomBirthdate() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	year := r.Intn(2002-1985+1) + 1985
+	year := r.Intn(1996-1985+1) + 1985
 	month := r.Intn(12) + 1
 	day := r.Intn(28) + 1
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day)

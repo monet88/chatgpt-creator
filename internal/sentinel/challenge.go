@@ -2,6 +2,7 @@ package sentinel
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,13 @@ import (
 	fhttp "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 )
+
+// Opts carries optional dependencies for BuildSentinelToken.
+// CamofoxURL is required when the sentinel challenge requires Turnstile.
+type Opts struct {
+	CamofoxURL string
+	Proxy      string
+}
 
 func FetchSentinelChallenge(session tls_client.HttpClient, deviceID, flow, ua, secChUA, impersonate string) (map[string]any, error) {
 	generator := NewGenerator(deviceID, ua)
@@ -65,7 +73,7 @@ func FetchSentinelChallenge(session tls_client.HttpClient, deviceID, flow, ua, s
 	return result, nil
 }
 
-func BuildSentinelToken(session tls_client.HttpClient, deviceID, flow, ua, secChUA, impersonate string) (string, error) {
+func BuildSentinelToken(session tls_client.HttpClient, deviceID, flow, ua, secChUA, impersonate string, opts ...Opts) (string, error) {
 	challenge, err := FetchSentinelChallenge(session, deviceID, flow, ua, secChUA, impersonate)
 	if err != nil {
 		return "", err
@@ -90,9 +98,11 @@ func BuildSentinelToken(session tls_client.HttpClient, deviceID, flow, ua, secCh
 		pValue = generator.GenerateRequirementsToken()
 	}
 
+	tValue := resolveTurnstileToken(challenge, deviceID, cValue, opts)
+
 	tokenData := map[string]string{
 		"p":    pValue,
-		"t":    "",
+		"t":    tValue,
 		"c":    cValue,
 		"id":   deviceID,
 		"flow": flow,
@@ -104,4 +114,33 @@ func BuildSentinelToken(session tls_client.HttpClient, deviceID, flow, ua, secCh
 	}
 
 	return string(resultBytes), nil
+}
+
+// resolveTurnstileToken checks if Turnstile is required and solves it via camofox.
+// Returns empty string if camofox is not configured or solving fails (non-fatal).
+func resolveTurnstileToken(challenge map[string]any, deviceID, sentinelCToken string, opts []Opts) string {
+	tsData, _ := challenge["turnstile"].(map[string]any)
+	if tsData == nil {
+		return ""
+	}
+	tsRequired, _ := tsData["required"].(bool)
+	dx, _ := tsData["dx"].(string)
+	if !tsRequired || dx == "" {
+		return ""
+	}
+
+	var camofoxURL, proxy string
+	if len(opts) > 0 {
+		camofoxURL = opts[0].CamofoxURL
+		proxy = opts[0].Proxy
+	}
+	if camofoxURL == "" {
+		return ""
+	}
+
+	token, err := SolveTurnstile(context.Background(), camofoxURL, proxy, deviceID, sentinelCToken, dx)
+	if err != nil {
+		return ""
+	}
+	return token
 }

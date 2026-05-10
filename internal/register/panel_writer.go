@@ -34,6 +34,7 @@ type panelEntry struct {
 	OrganizationID   string            `json:"organization_id"`
 	PlanType         string            `json:"plan_type"`
 	RefreshToken     string            `json:"refresh_token"`
+	TOTPSecret       string            `json:"totp_secret,omitempty"`
 	Type             string            `json:"type"`
 }
 

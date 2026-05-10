@@ -92,11 +92,24 @@ go run ./cmd/register \
   --workers 3 \
   --cloudflare-mail-url https://mail.monet.uno \
   --proxy http://user:pass@host:port \
+  --mfa \
+  --camofox-url http://localhost:9377 \
   --codex \
   --panel-output accounts/tokens/
 ```
 
-Output: `accounts/cre/<datetime>.txt` (format: `email|password|mailbox_url`)
+Output: `accounts/cre/<datetime>.txt`
+- default format: `email|password|mailbox_url`
+- with `--mfa`: `email|password|mailbox_url|totp_secret`
+- when `--codex` and `--mfa` are both enabled, panel JSON under `accounts/tokens/` can also include `totp_secret`
+
+When `--mfa` is enabled, a camofox REST server must be reachable at `--camofox-url`
+(default `http://localhost:9377`) so the post-registration TOTP enrollment flow can
+drive the ChatGPT Security UI.
+The MFA browser session also reuses the registration proxy, so `--proxy` still
+applies during enrollment.
+If the login path prompts for a password, the enrollment flow reuses the
+registration password.
 
 ## Workflow 2: Codex Token Extraction (Node.js — for existing accounts)
 
@@ -194,11 +207,47 @@ Full API docs: `docs/proxy/proxy-vn-api-xoay.md`
 - Must select Vietnam (+84) in country dropdown before submitting number
 - Some VN numbers rejected by OpenAI — script retries up to 3× automatically
 
+## Registration Flow — Invariants (DO NOT BREAK)
+
+The `authorize` step (`internal/register/flow.go → runFlow`) follows a redirect and
+lands on one of these paths. Each path has a fixed, non-negotiable handling:
+
+| `authorize` final path | Correct action | WRONG (breaks flow) |
+|------------------------|---------------|---------------------|
+| `create-account/password` | `register()` → `sendOTP()` → validate OTP → `createAccount()` | Adding `openai-sentinel-token` to `register()` |
+| `email-verification` / `email-otp` | **Skip `register()` entirely.** OTP already dispatched by OpenAI. Validate OTP → `createAccount()` | Calling `register()` or navigating to password page first |
+| `about-you` | `createAccount()` directly, no OTP | Calling `register()` or `sendOTP()` |
+| `callback` / `chatgpt.com` | Return nil (done) | Any further API calls |
+
+### Sentinel token rules — fixed contracts
+
+```
+register()       → NO openai-sentinel-token header  (adding it = 400)
+createAccount()  → MUST have openai-sentinel-token header (BuildSentinelToken)
+validateOTP()    → NO openai-sentinel-token header
+```
+
+### Why email-verification skips register
+
+OpenAI's OTP-first signup flow dispatches email OTP before password collection.
+When `authorize` lands on `email-verification`, the OTP is already in the inbox.
+Calling `register()` at this point returns 400 `upstream_changed`.
+The password saved to `accounts/cre/` comes from the `--password` flag; the
+account may be passwordless at the OpenAI level on this flow path.
+
+### Reference implementation
+
+Upstream repo `verssache/chatgpt-creator` is the source of truth for flow
+correctness. When OpenAI changes the flow, compare against upstream before
+adding intermediate navigation steps or new sentinel token usage.
+
 ## Common Issues + Fixes (memorize these)
 
 | Issue | Root Cause | Fix |
 |-------|-----------|-----|
+| `register (upstream_changed, status=400)` | `openai-sentinel-token` header sent with `register()`, or `register()` called on `email-verification` path | See "Registration Flow — Invariants" above |
 | `camofox server not reachable` | Server not running | Script auto-starts; or manually: `camofox server start` |
+| `MFA setup failed (non-fatal): ...` | `--mfa` enabled but camofox REST server not reachable or TOTP UI changed | Start/verify camofox at `--camofox-url` (default `http://localhost:9377`); account creation continues without MFA secret |
 | OTP rejected as stale | `fresh_since` set after OTP arrived | Script sets `fresh_since = now() - 60s` before email submit |
 | OTP timeout | Mail delivery ~1–2 min | Default timeout 300s; check mail API health |
 | TOTP wrong code | Clock skew near window boundary | Script retries with next 30s window automatically |
