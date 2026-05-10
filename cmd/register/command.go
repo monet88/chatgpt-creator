@@ -332,9 +332,11 @@ func newRegisterCommand(in io.Reader, out, errOut io.Writer) *cobra.Command {
 				providers.CodexOutput = codexPath
 				providers.PanelOutputDir = panelOutputDir
 			}
+			if camofoxURL != "" {
+				providers.CamofoxURL = camofoxURL
+			}
 			if mfaEnabled {
 				providers.MFAEnabled = true
-				providers.CamofoxURL = camofoxURL
 			}
 
 			if jsonMode {

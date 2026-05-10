@@ -43,9 +43,10 @@ type Client struct {
 	codexEnabled   bool
 	codexOutput    string
 	panelOutputDir string
-	mfaEnabled     bool
-	camofoxURL     string
-	totpSecret     string
+	mfaEnabled      bool
+	camofoxURL      string
+	totpSecret      string
+	accountPassword string
 }
 
 func NewClient(proxy, tag string, workerID int, printMu, fileMu *sync.Mutex) (*Client, error) {

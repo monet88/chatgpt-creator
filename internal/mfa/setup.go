@@ -35,7 +35,7 @@ func SetupTOTP(ctx context.Context, emailAddr string, otpProvider email.OTPProvi
 
 	browser := camofox.NewClient(camofoxUserID, camofox.WithBaseURL(opts.CamofoxBaseURL))
 	const sessionKey = "mfa-setup"
-	loginTab, err := browser.OpenTabWithOptions(ctx, "https://chatgpt.com", sessionKey, camofox.OpenTabOptions{ProxyURL: opts.Proxy})
+	loginTab, err := browser.OpenTabWithOptions(ctx, "https://chatgpt.com/auth/login", sessionKey, camofox.OpenTabOptions{ProxyURL: opts.Proxy})
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +104,9 @@ func SetupTOTP(ctx context.Context, emailAddr string, otpProvider email.OTPProvi
 	if err := browser.Wait(ctx, setupTab, 8*time.Second); err != nil {
 		return nil, err
 	}
+	// Dismiss first-time onboarding/welcome dialogs (e.g. "Tips for getting started").
+	clickOptional(ctx, browser, setupTab, `button:has-text("Close")`, `button[aria-label="Close"]`, `[data-testid="close-button"]`)
+	clickOptional(ctx, browser, setupTab, `button:has-text("Got it")`, `button:has-text("Start chatting")`, `button:has-text("Skip")`, `button:has-text("OK")`)
 	clickOptional(ctx, browser, setupTab, `button:has-text("Authenticator app")`)
 	clickOptional(ctx, browser, setupTab, `button:has-text("Turn on")`)
 	clickOptional(ctx, browser, setupTab, `button:has-text("Continue")`)
@@ -122,6 +125,9 @@ func SetupTOTP(ctx context.Context, emailAddr string, otpProvider email.OTPProvi
 	if secret == "" {
 		return nil, fmt.Errorf("mfa: manual setup key not found in snapshot: %s", excerpt(text))
 	}
+
+	// Advance from manual key page to TOTP verification code input.
+	clickOptional(ctx, browser, setupTab, `button:has-text("Next")`, `button:has-text("Continue")`, `button:has-text("I've set it up")`)
 
 	for attempt := 0; attempt < 3; attempt++ {
 		code, err := GenerateTOTP(secret)
@@ -152,6 +158,82 @@ func SetupTOTP(ctx context.Context, emailAddr string, otpProvider email.OTPProvi
 		}
 	}
 	return nil, fmt.Errorf("mfa: verification did not reach a success state: %s", excerpt(text))
+}
+
+// LoginViaBrowser ensures the camofox browser profile for camofoxUserID has an active
+// ChatGPT session. If the profile already has a valid session, this is a no-op.
+// Cookies persist in the camofox profile after the tab is closed, so subsequent
+// browser-based flows (e.g. Codex extraction) can reuse the session.
+func LoginViaBrowser(ctx context.Context, emailAddr string, otpProvider email.OTPProvider, camofoxUserID string, opts SetupOpts) error {
+	if otpProvider == nil {
+		return fmt.Errorf("mfa: otp provider is required")
+	}
+	if strings.TrimSpace(camofoxUserID) == "" {
+		return fmt.Errorf("mfa: camofox user id is required")
+	}
+
+	browser := camofox.NewClient(camofoxUserID, camofox.WithBaseURL(opts.CamofoxBaseURL))
+	loginTab, err := browser.OpenTabWithOptions(ctx, "https://chatgpt.com/auth/login", "mfa-setup", camofox.OpenTabOptions{ProxyURL: opts.Proxy})
+	if err != nil {
+		return err
+	}
+	defer browser.CloseTab(context.Background(), loginTab)
+
+	if err := browser.Wait(ctx, loginTab, 8*time.Second); err != nil {
+		return err
+	}
+	loginURL, text, err := pageState(ctx, browser, loginTab)
+	if err != nil {
+		return err
+	}
+	if !needsLogin(loginURL, text) {
+		return nil
+	}
+	if err := typeAny(ctx, browser, loginTab, emailAddr, `input[name="email"]`, `input[type="email"]`); err != nil {
+		if clickErr := clickAny(ctx, browser, loginTab, `a:has-text("Log in")`, `button:has-text("Log in")`); clickErr != nil {
+			return fmt.Errorf("mfa: open login: %w", err)
+		}
+		if err = browser.Wait(ctx, loginTab, 8*time.Second); err != nil {
+			return err
+		}
+		if err = typeAny(ctx, browser, loginTab, emailAddr, `input[name="email"]`, `input[type="email"]`); err != nil {
+			return err
+		}
+	}
+	if err := clickAny(ctx, browser, loginTab, `button[type="submit"]`, `button:has-text("Continue")`); err != nil {
+		return err
+	}
+	if err := browser.Wait(ctx, loginTab, 8*time.Second); err != nil {
+		return err
+	}
+	loginURL, text, err = pageState(ctx, browser, loginTab)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(loginURL, "/password") || strings.Contains(strings.ToLower(text), "password") {
+		if strings.TrimSpace(opts.Password) == "" {
+			return fmt.Errorf("mfa: password challenge requires a password")
+		}
+		if err := typeAny(ctx, browser, loginTab, opts.Password, `input[type="password"]`); err != nil {
+			return err
+		}
+		if err := clickAny(ctx, browser, loginTab, `button[type="submit"]`, `button:has-text("Continue")`); err != nil {
+			return err
+		}
+		if err := browser.Wait(ctx, loginTab, 8*time.Second); err != nil {
+			return err
+		}
+		loginURL, text, err = pageState(ctx, browser, loginTab)
+		if err != nil {
+			return err
+		}
+	}
+	if strings.Contains(loginURL, "email-verification") || strings.Contains(loginURL, "/otp") || strings.Contains(strings.ToLower(text), "verification code") {
+		if err := submitLoginOTP(ctx, browser, loginTab, emailAddr, otpProvider, opts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func otpTimeout(opts SetupOpts) time.Duration {

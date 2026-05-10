@@ -162,9 +162,11 @@ func RunBatchForCLIWithProviders(ctx context.Context, totalAccounts int, outputF
 		deps.codexOutput = providers.CodexOutput
 		deps.panelOutputDir = providers.PanelOutputDir
 	}
+	if providers.CamofoxURL != "" {
+		deps.camofoxURL = providers.CamofoxURL
+	}
 	if providers.MFAEnabled {
 		deps.mfaEnabled = true
-		deps.camofoxURL = providers.CamofoxURL
 	}
 	if providers.ProxyPool != nil {
 		pool := providers.ProxyPool

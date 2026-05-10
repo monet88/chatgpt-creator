@@ -15,7 +15,7 @@ import (
 const (
 	defaultAuthBaseURL = "https://auth.openai.com"
 	defaultClientID    = "app_EMoamEEZ73f0CkXaXp7hrann"
-	defaultRedirectURI = "http://127.0.0.1:1455/auth/callback"
+	defaultRedirectURI = "http://localhost:1455/auth/callback"
 	defaultScope       = "openid email profile offline_access"
 )
 
@@ -34,6 +34,7 @@ type SSOConfig struct {
 	ClientID    string
 	RedirectURI string
 	Scope       string
+	Prompt      string // "login" forces fresh auth even with existing session
 }
 
 // DefaultSSOConfig returns the default Codex SSO configuration.
@@ -58,6 +59,9 @@ func BuildAuthorizeURL(cfg SSOConfig, pkce *PKCE, state string) string {
 		"code_challenge_method":      {pkce.Method},
 		"id_token_add_organizations": {"true"},
 		"codex_cli_simplified_flow":  {"true"},
+	}
+	if cfg.Prompt != "" {
+		params["prompt"] = []string{cfg.Prompt}
 	}
 	return cfg.AuthBaseURL + "/oauth/authorize?" + params.Encode()
 }

@@ -299,6 +299,7 @@ func (c *Client) RunRegister(emailAddr, password, name, birthdate string) error 
 // is enabled, extracts OAuth tokens for Codex after a successful registration.
 func (c *Client) RunRegisterWithContext(ctx context.Context, emailAddr, password, name, birthdate string) error {
 	c.totpSecret = ""
+	c.accountPassword = password
 
 	err := c.runFlow(ctx, emailAddr, password, name, birthdate)
 	if err != nil {
@@ -645,9 +646,13 @@ func (c *Client) validatePhoneOTP(ctx context.Context, otp string) error {
 }
 
 // extractCodexTokens runs the Codex PKCE OAuth flow immediately after a successful
-// registration using the existing authenticated session, then appends the tokens to
-// the output file. Returns an error on failure; does not affect the registration result.
+// registration. Uses camofox browser when available (handles consent page); falls
+// back to TLS client session otherwise. Returns an error on failure; does not affect
+// the registration result.
 func (c *Client) extractCodexTokens(ctx context.Context, emailAddr string) error {
+	if c.camofoxURL != "" {
+		return c.extractCodexViaBrowser(ctx, emailAddr)
+	}
 	pkce, err := codex.GeneratePKCE()
 	if err != nil {
 		return fmt.Errorf("codex: PKCE generation failed: %w", err)
