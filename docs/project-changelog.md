@@ -1,5 +1,26 @@
 # Project Changelog
 
+## 2026-05-10 — MFA TOTP Setup + Codex Browser Extraction via Fixed Port 1455
+
+### Added
+- `internal/mfa/` package: `SetupTOTP` and `LoginViaBrowser` for browser-driven TOTP enrollment and login via camofox.
+- `internal/register/codex_browser.go`: full rewrite — Codex PKCE OAuth flow via camofox browser with `prompt=login`, fixed `redirect_uri=http://localhost:1455/auth/callback`, sequential login state machine (email → password → email OTP → phone/SMS OTP → TOTP → consent).
+- `codex1455Mu sync.Mutex`: package-level mutex serializing concurrent workers on port 1455.
+- `selectVietnam()`: robust Vietnam (+84) country code selection — click-based dropdown first, JS `<select>` fallback.
+- Phone/SMS OTP handling in Codex browser flow via `c.phoneProvider` (ViOTP service 1234, VN numbers).
+- `Client.accountPassword` field to carry registration password into the Codex browser login step.
+
+### Changed
+- `internal/codex/sso.go`: `defaultRedirectURI` changed from `http://127.0.0.1:1455/auth/callback` to `http://localhost:1455/auth/callback` (only whitelisted form accepted by auth.openai.com). Added `Prompt string` field to `SSOConfig`; `BuildAuthorizeURL` emits `prompt` param when set.
+- `internal/register/flow.go`: `RunRegisterWithContext` sets `c.accountPassword`; removed pre-Codex `LoginViaBrowser` call (replaced by `prompt=login` in browser flow).
+- `internal/mfa/setup.go`: added onboarding dialog dismissal (`clickOptional` for Close/Got it/Skip), added `clickOptional` for "Next"/"Continue"/"I've set it up" to advance from manual key page to TOTP verification input. `LoginViaBrowser` session key changed to `"mfa-setup"`.
+
+### Root cause documented
+`redirect_uri=http://127.0.0.1:PORT/auth/callback` is not in auth.openai.com's whitelist — any 127.0.0.1 address or random port returns `unknown_error`. Only `http://localhost:1455/auth/callback` is accepted (matching the ppap panel's generate-link output).
+
+### Validation
+- `go build ./...` — clean
+
 ## 2026-05-10 — Registration Flow Fix: OTP-First Path + Sentinel Contract Correction
 
 ### Fixed

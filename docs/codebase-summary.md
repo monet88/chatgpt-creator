@@ -1,6 +1,6 @@
 # Codebase Summary
 
-_Last updated: 2026-05-10 (flow fix: OTP-first path, sentinel token contracts)_
+_Last updated: 2026-05-10 (MFA TOTP setup + Codex browser extraction via port 1455)_
 
 ## Repository Snapshot
 
@@ -19,9 +19,12 @@ _Last updated: 2026-05-10 (flow fix: OTP-first path, sentinel token contracts)_
 - External dependencies: OpenAI auth/sentinel endpoints and `generator.email`.
 - Output artifacts: `accounts/cre/<datetime>.txt` credential files (`email|password|mailboxURL`) + `blacklist.json` + optional Codex token files under `accounts/tokens/`.
 - Key internal packages:
-  - `internal/register/` — batch runner, flow state machine, panel token writer.
+  - `internal/register/` — batch runner, flow state machine, panel token writer, Codex browser extraction.
   - `internal/email/` — OTP provider interface; `CloudflareTempMailProvider` polls Worker API.
   - `internal/web/` — embedded web UI served by the `serve` subcommand (SSE log stream, `ui.html`).
+  - `internal/mfa/` — TOTP enrollment (`SetupTOTP`) and browser login (`LoginViaBrowser`) via camofox.
+  - `internal/codex/` — PKCE generation, SSO config, callback interceptor, token exchange.
+  - `internal/camofox/` — camofox REST API client (tab open/close/snapshot/click/type/evaluate).
 
 ### 2) `cloudflare-temp-mail` (TypeScript Worker)
 
@@ -45,9 +48,10 @@ _Last updated: 2026-05-10 (flow fix: OTP-first path, sentinel token contracts)_
 3. Runtime options are validated.
 4. Batch runner executes worker loop with runtime controls.
 5. Worker runs registration flow state machine (see below) + OTP polling and writes credential on success.
-6. Optional: post-registration Codex PKCE OAuth flow extracts `access_token`/`refresh_token`.
-7. Optional `--panel-output`: writes per-account `codex-{email}-{plan}.json` (panel-compatible format).
-8. Batch returns structured summary (`BatchResult`).
+6. Optional `--mfa`: post-registration TOTP enrollment via camofox browser; saves `totp_secret` to credential line and `Client.totpSecret`.
+7. Optional `--codex`: post-registration (or post-MFA) Codex PKCE OAuth flow via camofox browser — fixed port 1455, `prompt=login`, full sequential login state machine; extracts `access_token`/`refresh_token`/`id_token`.
+8. Optional `--panel-output`: writes per-account `codex-{email}-{plan}.json` (panel-compatible format).
+9. Batch returns structured summary (`BatchResult`).
 
 #### Registration flow state machine (`internal/register/flow.go`)
 

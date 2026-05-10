@@ -17,8 +17,18 @@ CLI (cmd/register)
           -> Client Factory (internal/register/client.go)
           -> Flow Engine (internal/register/flow.go)
               -> OTP Provider (internal/email)
+              -> Phone Provider (internal/phone / ViOTP)
               -> Sentinel Token Builder (internal/sentinel)
-          -> Credential Writer (output file)
+          -> [--mfa] MFA Setup (internal/mfa)
+              -> Camofox Browser (internal/camofox)
+                  -> chatgpt.com login + TOTP enrollment
+          -> [--codex] Codex Extraction (internal/register/codex_browser.go)
+              -> Camofox Browser (internal/camofox)
+                  -> auth.openai.com OAuth (prompt=login, port 1455)
+                  -> Callback Interceptor (internal/codex/sso.go → 127.0.0.1:1455)
+                  -> Token Exchange (internal/codex/sso.go)
+          -> Credential Writer (accounts/cre/<datetime>.txt)
+          -> Panel Writer (accounts/tokens/*.json)
   -> BatchResult + Failure Summary
 ```
 
@@ -78,12 +88,53 @@ Do not add navigation to `create-account/password` before `register()` on this p
 When debugging a flow regression, compare against `verssache/chatgpt-creator`
 (upstream reference) before adding new steps.
 
+## MFA Setup Flow (`--mfa`, `internal/mfa/setup.go`)
+
+```
+camofox browser (userId = email-derived, sessionKey = "mfa-setup")
+  → chatgpt.com/auth/login
+  → type email → [password] → [email OTP]
+  → logged in
+
+  → chatgpt.com/?action=enable&factor=totp#settings/Security
+  → dismiss onboarding dialogs
+  → Authenticator app → Turn on → Set up manually
+  → extract TOTP secret from page text
+  → click Next → type TOTP code → Verify
+  → save totpSecret in Client
+```
+
+## Codex Extraction Flow (`--codex`, `internal/register/codex_browser.go`)
+
+Fixed port 1455 — serialized by `codex1455Mu` across workers.
+
+```
+codex.InterceptCallback("127.0.0.1:1455", state, 90s)  [goroutine]
+
+camofox browser (userId = email-derived, sessionKey = "codex-login")
+  → auth.openai.com/oauth/authorize?...&prompt=login&redirect_uri=http://localhost:1455/auth/callback
+  → auth.openai.com/log-in              → type email → submit
+  → auth.openai.com/log-in/password     → type password → submit
+  → (if) email-verification             → get OTP from mail → type → submit
+  → (if) phone-verification             → ViOTP rent VN number → selectVietnam() → submit
+                                          → wait SMS OTP → type → submit
+  → (if) totp + totpSecret set          → GenerateTOTP() → type → submit
+  → consent page                        → click Continue
+  → http://localhost:1455/auth/callback?code=...
+  → InterceptCallback returns code
+  → ExchangeCode(code, pkce.Verifier) → POST /oauth/token
+  → access_token / refresh_token / id_token
+```
+
+`redirect_uri` **must** be `http://localhost:1455/auth/callback` — `127.0.0.1` or any other port is rejected by auth.openai.com.
+
 ## Concurrency Model
 
 - Worker pool (`maxWorkers` goroutines)
 - Counters via `sync/atomic`
 - Shared output/log synchronization via mutexes
 - Context-aware delay/retry controls
+- `codex1455Mu` serializes Codex browser extractions (port 1455 singleton)
 
 ## Failure Model
 
